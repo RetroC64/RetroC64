@@ -8,6 +8,9 @@ namespace RetroC64;
 /// <summary>
 /// Defines memory-mapped register addresses and control flags for the Commodore 64 hardware.
 /// </summary>
+/// <remarks>
+/// Documentation from https://sta.c64.org/cbm64mem.html
+/// </remarks>
 public static class C64Registers
 {
     // VIC-II (Video Interface Chip) Registers
@@ -663,9 +666,9 @@ public static class C64Registers
     // Memory Management Unit (MMU)
 
     /// <summary>CPU port register for memory configuration. Use <see cref="CPUPortFlags"/> for bit definitions.</summary>
-    public const ushort C64_CPU_PORT = 0x0001;
+    public const byte C64_CPU_PORT = 0x0001;
     /// <summary>CPU port data direction register.</summary>
-    public const ushort C64_CPU_PORT_DDR = 0x0000;
+    public const byte C64_CPU_PORT_DDR = 0x0000;
 
     // Color Constants
 
@@ -701,6 +704,30 @@ public static class C64Registers
     public const byte COLOR_LIGHT_BLUE = 0x0E;
     /// <summary>Light grey color value.</summary>
     public const byte COLOR_LIGHT_GREY = 0x0F;
+
+    /// <summary>
+    /// Execution address of non-maskable interrupt service routine (NMI vector) at $FFFA-$FFFB.
+    /// </summary>
+    /// <remarks>
+    /// Default: $FE43.
+    /// </remarks>
+    public const ushort NMI_VECTOR = 0xFFFA;
+
+    /// <summary>
+    /// Execution address of cold reset (RESET vector) at $FFFC-$FFFD.
+    /// </summary>
+    /// <remarks>
+    /// Default: $FCE2.
+    /// </remarks>
+    public const ushort RESET_VECTOR = 0xFFFC;
+
+    /// <summary>
+    /// Execution address of interrupt service routine (IRQ/BRK vector) at $FFFE-$FFFF.
+    /// </summary>
+    /// <remarks>
+    /// Default: $FF48.
+    /// </remarks>
+    public const ushort IRQ_VECTOR = 0xFFFE;
 
     // I/O Flags and Enums
 
@@ -865,11 +892,15 @@ public static class C64Registers
         SerialPort = 1 << 3,
         /// <summary>FLAG pin.</summary>
         FlagPin = 1 << 4,
+
+        Unused1 = 1 << 5,
+        Unused2 = 1 << 6,
+        
         // Bits 5-6 unused
         /// <summary>IRQ/NMI generated.</summary>
         IRQ = 1 << 7,
         /// <summary>Clear all interrupts.</summary>
-        ClearAllInterrupts = TimerA | TimerB | TimeOfDay | SerialPort | FlagPin,
+        ClearAllInterrupts = TimerA | TimerB | TimeOfDay | SerialPort | FlagPin | Unused1 | Unused2,
     }
 
     /// <summary>
@@ -924,18 +955,42 @@ public static class C64Registers
         SetAlarm = 1 << 7,
     }
 
+
     /// <summary>
     /// CPU port configuration flags. Used with <see cref="C64Registers.C64_CPU_PORT"/>.
     /// </summary>
+    /// <remarks>
+    /// Bits #0-#2: Configuration for memory areas $A000-$BFFF, $D000-$DFFF and $E000-$FFFF. Values:
+    /// 
+    /// - %x00: RAM visible in all three areas.
+    /// 
+    /// - %x01: RAM visible at $A000-$BFFF and $E000-$FFFF.
+    /// 
+    /// - %x10: RAM visible at $A000-$BFFF; KERNAL ROM visible at $E000-$FFFF.
+    /// 
+    /// - %x11: BASIC ROM visible at $A000-$BFFF; KERNAL ROM visible at $E000-$FFFF.
+    /// 
+    /// - %0xx: Character ROM visible at $D000-$DFFF. (Except for the value %000, see above.)
+    /// 
+    /// - %1xx: I/O area visible at $D000-$DFFF. (Except for the value %100, see above.)
+    /// 
+    /// Bit #3: Datasette output signal level.
+    /// 
+    /// Bit #4: Datasette button status; 0 = One or more of PLAY, RECORD, F.FWD or REW pressed; 1 = No button is pressed.
+    /// 
+    /// Bit #5: Datasette motor control; 0 = On; 1 = Off.
+    /// </remarks>
     [Flags]
     public enum CPUPortFlags : byte
     {
         /// <summary>No configuration flag.</summary>
         None = 0,
-        /// <summary>LORAM: 0=BASIC ROM, 1=RAM.</summary>
-        BasicRomAsRam = 1 << 0,
-        /// <summary>HIRAM: 0=KERNAL ROM, 1=RAM.</summary>
-        KernalRomAsRam = 1 << 1,
+        RamVisibleAtBasicAndKernalRoms = 0b01,
+
+        RamVisibleAtBasicRom = 0b10,
+
+        BasicAndKernalROM = 0b11,
+
         /// <summary>CHAREN: 0=char ROM, 1=I/O.</summary>
         CharRomAsIO = 1 << 2,
         /// <summary>Cassette data output.</summary>
@@ -945,6 +1000,6 @@ public static class C64Registers
         /// <summary>Cassette motor control.</summary>
         CassetteMotor = 1 << 5,
         /// <summary>All RAM configuration (LORAM, HIRAM, CHAREN, CassetteSwitch, CassetteMotor).</summary>
-        FullRam = BasicRomAsRam | KernalRomAsRam | CharRomAsIO | CassetteSwitch | CassetteMotor,
+        FullRam = RamVisibleAtBasicAndKernalRoms | CharRomAsIO | CassetteSwitch | CassetteMotor,
     }
 }
