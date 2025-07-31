@@ -12,5 +12,6 @@
     <File Path="global.json" />
   </Folder>
   <Project Path="RetroC64.Tests/RetroC64.Tests.csproj" />
+  <Project Path="RetroC64.Vice/RetroC64.Vice.csproj" />
   <Project Path="RetroC64/RetroC64.csproj" />
 </Solution>

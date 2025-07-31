@@ -1,0 +1,263 @@
+// Copyright (c) Alexandre Mutel. All rights reserved.
+// Licensed under the BSD-Clause 2 license.
+// See license.txt file in the project root for full license information.
+
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
+using System.Net.Sockets;
+using RetroC64.Vice.Monitor.Commands;
+using RetroC64.Vice.Monitor.Responses;
+using RetroC64.Vice.Monitor.Shared;
+
+// ReSharper disable InconsistentNaming
+
+namespace RetroC64.Vice.Monitor;
+
+/// <summary>
+/// Provides an interface to communicate with the VICE emulator monitor via TCP.
+/// </summary>
+public sealed class ViceMonitor : IDisposable
+{
+    private const byte STX = 0x02;
+    private const byte API_VERSION = 0x02;
+
+    public const int DefaultPort = 6502;
+
+    private readonly ConcurrentDictionary<MonitorRequestId, TaskCompletionSource<MonitorResponse>> _pending = new();
+    private readonly ConcurrentQueue<MonitorResponse> _responseQueue = new();
+    private TcpClient? _client;
+    private NetworkStream? _stream;
+    private Thread? _readerThread;
+    private volatile bool _running;
+    private uint _nextRequestId = 1;
+
+    /// <summary>
+    /// Occurs when a monitor response is received.
+    /// </summary>
+    public event Action<MonitorResponse>? ResponseReceived;
+
+    /// <summary>
+    /// Gets a value indicating whether the monitor is connected.
+    /// </summary>
+    public bool IsConnected => _client?.Connected == true;
+
+    /// <summary>
+    /// Connects to the VICE monitor server.
+    /// </summary>
+    /// <param name="host">The host address. Defaults to 127.0.0.1.</param>
+    /// <param name="port">The port number. Defaults to <see cref="DefaultPort"/>.</param>
+    public void Connect(string host = "127.0.0.1", int port = DefaultPort)
+    {
+        if (IsConnected) return;
+        _client = new TcpClient();
+        _client.Connect(host, port);
+        _stream = _client.GetStream();
+        _running = true;
+        State = EmulatorState.Running;
+        _readerThread = new Thread(ReaderLoop)
+        {
+            Name = "RetroC64-ViceMonitor-Reader",
+            IsBackground = true
+        };
+        _readerThread.Start();
+    }
+
+    /// <summary>
+    /// Disconnects from the VICE monitor server.
+    /// </summary>
+    public void Disconnect()
+    {
+        _running = false;
+        _stream?.Close();
+        _client?.Close();
+        _stream = null;
+        _client = null;
+        _readerThread = null;
+        State = EmulatorState.Unknown;
+        foreach (var key in _pending.Keys.ToList())
+        {
+            while (_pending.TryRemove(key, out var tcs))
+                tcs.TrySetCanceled();
+        }
+    }
+
+    /// <summary>
+    /// Gets the current state of the emulator.
+    /// </summary>
+    public EmulatorState State { get; private set; }
+
+    /// <summary>
+    /// Releases all resources used by the <see cref="ViceMonitor"/>.
+    /// </summary>
+    public void Dispose()
+    {
+        Disconnect();
+    }
+
+    private uint NextRequestId() => _nextRequestId++;
+
+    /// <summary>
+    /// Sends a command and asynchronously waits for a matching response.
+    /// </summary>
+    /// <param name="command">The command to send.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The monitor response.</returns>
+    public async Task<MonitorResponse> SendCommandAsync(MonitorCommand command, CancellationToken cancellationToken = default)
+    {
+        var tcs = new TaskCompletionSource<MonitorResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        SendCommand(command, tcs);
+        await using (cancellationToken.Register(() => tcs.TrySetCanceled()))
+        {
+            return await tcs.Task.ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Sends a command without waiting for a response.
+    /// </summary>
+    /// <param name="command">The command to send.</param>
+    public void SendCommand(MonitorCommand command)
+    {
+        SendCommand(command, null);
+    }
+
+    /// <summary>
+    /// Attempts to dequeue the next response in a non-blocking manner.
+    /// </summary>
+    /// <param name="response">The dequeued response, if available.</param>
+    /// <returns><c>true</c> if a response was dequeued; otherwise, <c>false</c>.</returns>
+    public bool TryDequeueResponse([NotNullWhen(true)] out MonitorResponse? response)
+    {
+        return _responseQueue.TryDequeue(out response);
+    }
+
+    /// <summary>
+    /// Waits for the next response in a blocking manner.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The next monitor response.</returns>
+    public MonitorResponse WaitForResponse(CancellationToken cancellationToken = default)
+    {
+        while (true)
+        {
+            if (_responseQueue.TryDequeue(out var response))
+            {
+                return response;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            Thread.Sleep(1);
+        }
+    }
+
+    private void SendCommand(MonitorCommand command, TaskCompletionSource<MonitorResponse>? tcs)
+    {
+        var stream = _stream;
+        if (stream is null)
+        {
+            throw new InvalidOperationException("Monitor is not connected. Call Connect() first.");
+        }
+
+        var bodyLength = command.BodyLength;
+
+        var totalLength = 11 + bodyLength;
+        var buffer = ArrayPool<byte>.Shared.Rent(totalLength);
+        var span = new Span<byte>(buffer, 0, totalLength)
+        {
+            [0] = STX,
+            [1] = API_VERSION
+        };
+
+        BinaryPrimitives.WriteInt32LittleEndian(span.Slice(2, 4), bodyLength);
+        span[10] = (byte)command.CommandType;
+
+        if (bodyLength > 0)
+        {
+            command.Serialize(span.Slice(11));
+        }
+
+        command.RequestId = NextRequestId();
+        BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(6, 4), command.RequestId);
+
+        if (tcs is not null)
+        {
+            _pending[new(command.RequestId)] = tcs;
+        }
+
+        stream.Write(span);
+
+        ArrayPool<byte>.Shared.Return(buffer); // Return the buffer to the pool
+    }
+
+    // Internal reader loop
+    private void ReaderLoop()
+    {
+        var stream = _stream!;
+        Span<byte> header = stackalloc byte[12];
+        try
+        {
+            while (_running)
+            {
+                stream.ReadExactly(header.Slice(0, 2));
+                if (header[0] != STX || header[1] != API_VERSION)
+                {
+                    break; // Exit entirely if the header is invalid, as we can't recover from this
+                }
+
+                stream.ReadExactly(header.Slice(2, 10));
+                int bodyLen = BinaryPrimitives.ReadInt32LittleEndian(header.Slice(2, 4));
+                var responseType = (MonitorResponseType)header[6];
+                var error = (MonitorErrorKind)header[7];
+                var requestId = new MonitorRequestId(BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(8, 4)));
+
+                int bodyBytes = bodyLen;
+                byte[]? body = null;
+                if (bodyBytes > 0)
+                {
+                    body = ArrayPool<byte>.Shared.Rent(bodyBytes);
+                    stream.ReadExactly(body.AsSpan(0, bodyBytes));
+                }
+
+                if (error == MonitorErrorKind.None)
+                {
+                    if (responseType == MonitorResponseType.Stopped)
+                    {
+                        State = EmulatorState.Paused;
+                    }
+                    else if (responseType == MonitorResponseType.Resumed)
+                    {
+                        State = EmulatorState.Running;
+                    }
+                }
+
+                var response = MonitorResponse.Create(responseType, error, requestId, body != null ? new ReadOnlySpan<byte>(body, 0, bodyBytes) : ReadOnlySpan<byte>.Empty);
+                if (!requestId.IsEvent && _pending.TryRemove(requestId, out var tcs))
+                {
+                    tcs.TrySetResult(response);
+                }
+                else
+                {
+                    _responseQueue.Enqueue(response);
+                }
+
+                ResponseReceived?.Invoke(response);
+                if (body != null)
+                {
+                    ArrayPool<byte>.Shared.Return(body);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore
+        }
+        finally
+        {
+            // Connection closed or error
+            _running = false;
+        }
+    }
+}
