@@ -2,14 +2,16 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using RetroC64.Vice.Monitor.Commands;
+using RetroC64.Vice.Monitor.Responses;
+using RetroC64.Vice.Monitor.Shared;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Net;
 using System.Net.Sockets;
-using RetroC64.Vice.Monitor.Commands;
-using RetroC64.Vice.Monitor.Responses;
-using RetroC64.Vice.Monitor.Shared;
+using System.Threading;
 
 // ReSharper disable InconsistentNaming
 
@@ -44,15 +46,41 @@ public sealed class ViceMonitor : IDisposable
     public bool IsConnected => _client?.Connected == true;
 
     /// <summary>
+    /// Gets or sets the endpoint for the binary monitor.
+    /// </summary>
+    public IPEndPoint BinaryMonitorEndPoint { get; set; } = new(IPAddress.Loopback, DefaultPort);
+
+    /// <summary>
     /// Connects to the VICE monitor server.
     /// </summary>
-    /// <param name="host">The host address. Defaults to 127.0.0.1.</param>
-    /// <param name="port">The port number. Defaults to <see cref="DefaultPort"/>.</param>
-    public void Connect(string host = "127.0.0.1", int port = DefaultPort)
+    /// <exception cref="ViceException">If it cannot connect to the VICE monitor server</exception>
+    public void Connect()
     {
         if (IsConnected) return;
-        _client = new TcpClient();
-        _client.Connect(host, port);
+        if (!TryConnect())
+        {
+            throw new ViceException($"Could not connect to VICE monitor server at {BinaryMonitorEndPoint}.");
+        }
+    }
+
+    /// <summary>
+    /// Connects to the VICE monitor server.
+    /// </summary>
+    public bool TryConnect()
+    {
+        if (IsConnected) return true;
+
+        var client = new TcpClient();
+        try
+        {
+            client.Connect(BinaryMonitorEndPoint);
+        } catch (SocketException ex)
+        {
+            client.Dispose();
+            return false;
+        }
+
+        _client = client;
         _stream = _client.GetStream();
         _running = true;
         State = EmulatorState.Running;
@@ -62,6 +90,8 @@ public sealed class ViceMonitor : IDisposable
             IsBackground = true
         };
         _readerThread.Start();
+
+        return true;
     }
 
     /// <summary>
