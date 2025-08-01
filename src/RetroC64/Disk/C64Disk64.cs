@@ -12,21 +12,27 @@ using System.Text;
 
 namespace RetroC64.Disk;
 
-// Disk type                  Size
-// ---------                  ------
-// 35 track, no errors        174848
-// 35 track, 683 error bytes  175531
-// 40 track, no errors        196608
-// 40 track, 768 error bytes  197376
-
 /// <summary>
 /// Represents a Commodore 64 D64 disk image, providing methods for reading, writing, formatting, and managing files and sectors.
 /// </summary>
 /// <remarks>
 /// Details from http://unusedino.de/ec64/technical/formats/d64.html
+///
+/// This class currently supports only the standard D64 disk format with 35 tracks.
 /// </remarks>
 public class C64Disk64
 {
+    // Disk type                  Size
+    // ---------                  ------
+    // 35 track, no errors        174848
+    // 35 track, 683 error bytes  175531
+    // 40 track, no errors        196608
+    // 40 track, 768 error bytes  197376
+
+    private const int D64Size = 174848; // Standard D64 size (35 tracks, 21 sectors per track)
+
+    private const int DirEntryFileNameSize = 16; // Maximum file name length in directory entries
+
     /// <summary>
     /// The size of a sector in bytes.
     /// </summary>
@@ -78,7 +84,7 @@ public class C64Disk64
         Debug.Assert(Unsafe.SizeOf<DirEntry>() == 32, $"Invalid directory entry size ({Unsafe.SizeOf<DirEntry>()} bytes) instead of 32 bytes.");
 
         TotalSectors = TrackOffsets[MaxTracks] / SectorSize;
-        _image = new byte[174848]; // Standard D64 size
+        _image = new byte[D64Size]; // Standard D64 size
         Format();
     }
 
@@ -438,7 +444,7 @@ public class C64Disk64
     private static bool IsValidD64Size(int size)
     {
         // Standard D64: 174848 bytes (35 tracks)
-        return size == 174848;
+        return size == D64Size;
     }
 
     private static void ValidateTrackSector(int track, int sector)
@@ -535,19 +541,6 @@ public class C64Disk64
         throw new IOException("No free directory entry.");
     }
 
-    [Flags]
-    private enum FileType : byte
-    {
-        DEL = 0b000,
-        SEQ = 0b001,
-        PRG = 0b010,
-        USR = 0b011,
-        REL = 0b100,
-        LockedFlag = 0x40, // Used to mark a file as locked in the directory entry
-        ClosedFlag = 0x80, // Used to mark a file as closed in the directory entry
-        ValidMask = 0x87 // Mask to extract file type bits
-    }
-
     private static string Convert_PETSCII_TO_ASCII(Span<byte> span)
     {
         var indexOfA0 = span.IndexOf((byte)0xA0);
@@ -594,7 +587,18 @@ public class C64Disk64
         }
     }
 
-    private const int DirEntryFileNameSize = 16;
+    [Flags]
+    private enum FileType : byte
+    {
+        DEL = 0b000,
+        SEQ = 0b001,
+        PRG = 0b010,
+        USR = 0b011,
+        REL = 0b100,
+        LockedFlag = 0x40, // Used to mark a file as locked in the directory entry
+        ClosedFlag = 0x80, // Used to mark a file as closed in the directory entry
+        ValidMask = 0x87 // Mask to extract file type bits
+    }
 
     /// <summary>
     /// Block Availability Map (BAM) structure for D64 disks.
