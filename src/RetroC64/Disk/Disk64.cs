@@ -20,7 +20,7 @@ namespace RetroC64.Disk;
 ///
 /// This class currently supports only the standard D64 disk format with 35 tracks.
 /// </remarks>
-public class C64Disk64
+public class Disk64
 {
     // Disk type                  Size
     // ---------                  ------
@@ -32,6 +32,8 @@ public class C64Disk64
     private const int D64Size = 174848; // Standard D64 size (35 tracks, 21 sectors per track)
 
     private const int DirEntryFileNameSize = 16; // Maximum file name length in directory entries
+
+    private const int FileInterleave = 10;
 
     /// <summary>
     /// The size of a sector in bytes.
@@ -65,9 +67,29 @@ public class C64Disk64
         18, 18, 18, 18, 18, 18, // 25-30
         17, 17, 17, 17, 17 // 31-35
     };
+
+    private static readonly byte[] TrackOrderedByAccess =
+    [
+        ..
+        Enumerable.Range(1, 17).Reverse().Select(x => (byte)x).ToArray() // From 17 to 1
+        ,
+        ..
+        Enumerable.Range(19, 6).Select(x => (byte)x).ToArray() // From 19-24
+        ,
+        ..
+        Enumerable.Range(25, 6).Select(x => (byte)x).ToArray() // From 25-30
+        ,
+        ..
+        Enumerable.Range(31, 5).Select(x => (byte)x).ToArray() // From 31-35
+        ,
+        18, // BAM track
+    ];
+    
     private static readonly int[] TrackOffsets = BuildTrackOffsets();
 
     private readonly byte[] _image;
+
+    private readonly byte[] _tempSector;
 
     /// <summary>
     /// Gets the total number of sectors on the disk.
@@ -75,9 +97,9 @@ public class C64Disk64
     public int TotalSectors { get; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="C64Disk64"/> class and formats the disk.
+    /// Initializes a new instance of the <see cref="Disk64"/> class and formats the disk.
     /// </summary>
-    public C64Disk64()
+    public Disk64()
     {
         Debug.Assert(Unsafe.SizeOf<Bam>() == 256, $"Invalid BAM size ({Unsafe.SizeOf<Bam>()} bytes) instead of 256 bytes.");
         Debug.Assert(Unsafe.SizeOf<BamEntry>() == 4, $"Invalid BAM entry size ({Unsafe.SizeOf<BamEntry>()} bytes) instead of 4 bytes.");
@@ -85,6 +107,7 @@ public class C64Disk64
 
         TotalSectors = TrackOffsets[MaxTracks] / SectorSize;
         _image = new byte[D64Size]; // Standard D64 size
+        _tempSector = new byte[SectorSize]; // Temporary buffer for sector operations
         Format();
     }
 
@@ -141,8 +164,8 @@ public class C64Disk64
             {
                 // The first 2 sectors of the BAM are track as reserved (0 and 1
                 bamEntry.FreeSectors -= 2;
-                bamEntry.SetSectorFree(0, false);
-                bamEntry.SetSectorFree(1, false);
+                bamEntry.Bitmap[0] = false;
+                bamEntry.Bitmap[1] = false;
             }
         }
 
@@ -206,10 +229,10 @@ public class C64Disk64
     /// Loads a D64 disk from a file.
     /// </summary>
     /// <param name="path">The path to the D64 file.</param>
-    /// <returns>A new <see cref="C64Disk64"/> instance loaded from the file.</returns>
-    public static C64Disk64 LoadFromFile(string path)
+    /// <returns>A new <see cref="Disk64"/> instance loaded from the file.</returns>
+    public static Disk64 LoadFromFile(string path)
     {
-        var disk = new C64Disk64();
+        var disk = new Disk64();
         disk.Load(File.ReadAllBytes(path));
         return disk;
     }
@@ -241,6 +264,19 @@ public class C64Disk64
     }
 
     /// <summary>
+    /// Gets the number of free sectors on a specific track.
+    /// </summary>
+    /// <param name="track">The track number (1-based).</param>
+    /// <returns>The number of free sectors on the track.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">If the track number is out of range (1-35).</exception>
+    public int GetFreeSectorsCount(int track)
+    {
+        if (track < 1 || track > MaxTracks) throw new ArgumentOutOfRangeException(nameof(track), "Track must be between 1 and 35.");
+        ref var bam = ref GetBam();
+        return bam.Entries[track - 1].FreeSectors;
+    }
+
+    /// <summary>
     /// Determines whether a sector is free.
     /// </summary>
     /// <param name="track">The track number (1-based).</param>
@@ -250,7 +286,7 @@ public class C64Disk64
     {
         ValidateTrackSector(track, sector);
         ref var bam = ref GetBam();
-        return bam.Entries[track - 1].IsSectorFree(sector);
+        return bam.Entries[track - 1].Bitmap[sector];
     }
 
     /// <summary>
@@ -275,10 +311,24 @@ public class C64Disk64
     /// <exception cref="ArgumentException">Thrown if the BAM track is specified.</exception>
     public void SetSectorFree(int track, int sector, bool free)
     {
-        if (track == BamTrack) throw new ArgumentException("Cannot set BAM track as free.");
         ValidateTrackSector(track, sector);
         ref var bam = ref GetBam();
-        bam.Entries[track - 1].SetSectorFree(sector, free);
+        ref var entry = ref bam.Entries[track - 1];
+
+        if (entry.Bitmap[sector] != free)
+        {
+            if (free)
+            {
+                entry.FreeSectors++;
+            }
+            else
+            {
+                if (entry.FreeSectors <= 0) throw new InvalidOperationException("Cannot set a used sector when no free sectors are available.");
+                entry.FreeSectors--;
+            }
+
+            entry.Bitmap[sector] = free;
+        }
     }
 
     /// <summary>
@@ -370,24 +420,30 @@ public class C64Disk64
         {
             var (track, sector) = sectors[i];
             var sectorData = GetSector(track, sector);
+
+            var tempSectorData = _tempSector.AsSpan();
             if (i < sectors.Count - 1)
             {
-                sectorData[0] = sectors[i].track;
-                sectorData[1] = sectors[i].sector;
+                tempSectorData[0] = sectors[i + 1].track;
+                tempSectorData[1] = sectors[i + 1].sector;
                 int len = Math.Min(SectorDataSize, data.Length - dataOffset);
-                data.Slice(dataOffset, len).CopyTo(sectorData.Slice(2, len));
-                if (len < SectorDataSize) sectorData.Slice(2 + len, SectorDataSize - len).Clear();
+                data.Slice(dataOffset, len).CopyTo(tempSectorData.Slice(2, len));
+                // We don't clear to keep the behavior of the original DOS which seems to keep a buffer around about what is written (TODO: or read?)
+                //if (len < SectorDataSize) tempSectorData.Slice(2 + len, SectorDataSize - len).Clear();
                 dataOffset += len;
             }
             else
             {
-                sectorData[0] = 0;
+                tempSectorData[0] = 0;
                 int len = data.Length - dataOffset;
                 Debug.Assert(len <= SectorDataSize);
-                sectorData[1] = (byte)(len + 1);
-                data.Slice(dataOffset, len).CopyTo(sectorData.Slice(2, len));
-                if (len < SectorDataSize) sectorData.Slice(2 + len, SectorDataSize - len).Clear();
+                tempSectorData[1] = (byte)(len + 1);
+                data.Slice(dataOffset, len).CopyTo(tempSectorData.Slice(2, len));
+                // We don't clear to keep the behavior of the original DOS which seems to keep a buffer around about what is written (TODO: or read?)
+                //if (len < SectorDataSize) tempSectorData.Slice(2 + len, SectorDataSize - len).Clear();
             }
+
+            tempSectorData.CopyTo(sectorData);
             SetSectorFree(track, sector, false);
         }
         // Add directory entry
@@ -474,23 +530,191 @@ public class C64Disk64
         if (len < span.Length) span.Slice(len).Fill(0xA0);
     }
 
+    private static byte NextInterleave(byte track, byte sector)
+    {
+        int maxSectorCount = SectorsPerTrack[track];
+        sector = (byte)(sector + FileInterleave);
+        if (sector >= maxSectorCount)
+        {
+            sector = (byte)(sector - maxSectorCount); // Wrap around if we exceed the maximum sector count
+            if (sector > 1)
+            {
+                sector--;
+            }
+        }
+        return (byte)sector;
+    }
+    
+    private bool TryAllocateSector(byte track, ref byte sector)
+    {
+        // Early exit if no free sectors are available on the track
+        if (GetFreeSectorsCount(track) == 0) return false;
+
+        var it = sector;
+
+        var maxSectorCount = SectorsPerTrack[track];
+        for (int i = 0; i < maxSectorCount; i++)
+        {
+            it = (byte)(it % maxSectorCount); // Ensure we start from a valid sector
+
+            if (IsSectorFree(track, it))
+            {
+                sector = it;
+                SetSectorFree(track, it, false);
+                return true;
+            }
+
+            it++;
+        }
+
+        return false; // No free sector found in the track
+    }
+
+    private enum FreeSectorSearchMode
+    {
+        /// <summary>
+        /// Go down and then flip up if needed.
+        /// </summary>
+        DownFlip,
+        /// <summary>
+        /// Go up and then flip down if needed.
+        /// </summary>
+        UpFlip,
+        /// <summary>
+        /// Go down until we can.
+        /// </summary>
+        ContinueDown,
+        /// <summary>
+        /// Go up until we can.
+        /// </summary>
+        ContinueUp,
+    }
+    
     private List<(byte track, byte sector)> AllocateSectorsForFile(int length)
     {
         int needed = (length + SectorDataSize - 1) / SectorDataSize;
-        var sectors = new List<(byte, byte)>();
-        for (byte t = 1; t <= MaxTracks && sectors.Count < needed; t++)
+        var sectors = new List<(byte track, byte sector)>();
+
+        // Circle around the Bam track to find the first free sector
+        var trackIndex = BamTrack;
+
+        int trackLow = trackIndex - 1;
+        int trackHigh = trackIndex + 1;
+        var state = FreeSectorSearchMode.DownFlip; 
+
+        byte sector = 0;
+        // We go from [1, MaxTracks]
+        // and we will try to allocate sectors in a flip down and up pattern from the Bam track
+        for (int i = 1; i < MaxTracks + 1; i++)
         {
-            for (byte s = 0; s < SectorsPerTrack[t] && sectors.Count < needed; s++)
+            if (i == MaxTracks)
             {
-                if (IsSectorFree(t, s))
+                trackIndex = BamTrack;
+            }
+            else
+            {
+                switch (state)
                 {
-                    sectors.Add((t, s));
-                    SetSectorFree(t, s, false);
+                    case FreeSectorSearchMode.DownFlip:
+                        if (trackLow >= 1)
+                        {
+                            trackIndex = trackLow--;
+                            state = FreeSectorSearchMode.UpFlip;
+                        }
+                        else
+                        {
+                            state = FreeSectorSearchMode.ContinueUp;
+                        }
+
+                        break;
+                    case FreeSectorSearchMode.UpFlip:
+                        if (trackHigh <= MaxTracks)
+                        {
+                            trackIndex = trackHigh++;
+                            state = FreeSectorSearchMode.DownFlip;
+                        }
+                        else
+                        {
+                            state = FreeSectorSearchMode.ContinueDown;
+                        }
+
+                        break;
+                }
+
+                switch (state)
+                {
+                    case FreeSectorSearchMode.ContinueDown:
+                        if (trackLow >= 1)
+                        {
+                            trackIndex = trackLow--;
+                        }
+                        else
+                        {
+                            state = FreeSectorSearchMode.ContinueUp; // No more tracks to go down, switch to continue up
+                            goto case FreeSectorSearchMode.ContinueUp;
+                        }
+
+                        break;
+                    case FreeSectorSearchMode.ContinueUp:
+                        if (trackHigh <= MaxTracks)
+                        {
+                            trackIndex = trackHigh++;
+                        }
+                        else
+                        {
+                            state = FreeSectorSearchMode.ContinueDown; // No more tracks to go up, switch to continue down
+                            goto case FreeSectorSearchMode.ContinueDown;
+                        }
+
+                        break;
                 }
             }
+
+            var track = (byte)trackIndex;
+            // Try to find a free sector on this track
+            bool allocated = false;
+            while (TryAllocateSector(track, ref sector))
+            {
+                sectors.Add((track, sector));
+                allocated = true;
+
+                if (sectors.Count == needed)
+                {
+                    // If we have enough sectors, we can stop searching
+                    break;
+                }
+
+                sector = NextInterleave(track, sector);
+            }
+
+            if (sectors.Count == needed)
+            {
+                // If we have enough sectors, we can stop searching
+                break;
+            }
+            
+            if (allocated)
+            {
+                // We continue with the sector computed by NextInterleave on the next track
+                state = track < BamTrack ? FreeSectorSearchMode.ContinueDown : FreeSectorSearchMode.ContinueUp;
+            }
+            else
+            {
+                sector = 0; // Reset the search for a free sector if no allocation was made
+            }
         }
+
+        // If we didn't find enough sectors, we need to free the allocated sectors
         if (sectors.Count < needed)
-            throw new IOException("Not enough free sectors.");
+        {
+            foreach (var (track, sectorToFree) in sectors)
+            {
+                SetSectorFree(track, sector, true);
+            }
+
+            throw new IOException("Disk is full. No free sectors available.");
+        }
+
         return sectors;
     }
 
@@ -720,40 +944,51 @@ public class C64Disk64
     {
         public byte FreeSectors; // Number of free sectors on this track
 
-        private fixed byte _freeSectorsMask[3]; // 3 bytes for free sectors mask (24 bits)
-
-        public ReadOnlySpan<byte> FreeSectorsMask => MemoryMarshal.CreateReadOnlySpan(ref _freeSectorsMask[0], 3);
-
-        public bool IsSectorFree(int sector)
-        {
-            int byteIndex = sector / 8;
-            int bitIndex = sector % 8;
-            return (_freeSectorsMask[byteIndex] & (1 << bitIndex)) != 0;
-        }
-
-        public void SetSectorFree(int sector, bool free)
-        {
-            int byteIndex = sector / 8;
-            int bitIndex = sector % 8;
-            if (free)
-                _freeSectorsMask[byteIndex] |= (byte)(1 << bitIndex);
-            else
-                _freeSectorsMask[byteIndex] &= (byte)~(1 << bitIndex);
-        }
+        public FreeSectorBitmap Bitmap;
 
         public void Initialize(int freeSectors)
         {
             FreeSectors = (byte)freeSectors;
+            var span = Bitmap.Span;
             for (int i = 0; i < 3; i++)
             {
-                _freeSectorsMask[i] = 0xFF; // Initialize all bits to 1 (all sectors free)
+                span[i] = 0xFF; // Initialize all bits to 1 (all sectors free)
             }
 
             // Clear the bits for the actual number of free sectors
-            for (int i = freeSectors; i < 32; i++)
+            for (int i = freeSectors; i < 24; i++)
             {
-                _freeSectorsMask[i / 8] &= (byte)~(1 << (i % 8));
+                Bitmap[i] = false;
             }
+        }
+    }
+
+    private struct FreeSectorBitmap
+    {
+        private byte _freeSectors0;
+        private byte _freeSectors1;
+        private byte _freeSectors2;
+
+        public Span<byte> Span => MemoryMarshal.CreateSpan(ref _freeSectors0, 3);
+        
+        public bool this[int sector]
+        {
+            get
+            {
+                int byteIndex = sector / 8;
+                int bitIndex = sector % 8;
+                return (Span[byteIndex] & (1 << bitIndex)) != 0;
+            }
+            set
+            {
+                int byteIndex = sector / 8;
+                int bitIndex = sector % 8;
+                if (value)
+                    Span[byteIndex] |= (byte)(1 << bitIndex);
+                else
+                    Span[byteIndex] &= (byte)~(1 << bitIndex);
+            }
+
         }
     }
 
