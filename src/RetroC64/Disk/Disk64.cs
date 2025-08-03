@@ -78,7 +78,7 @@ public class Disk64
         Debug.Assert(Unsafe.SizeOf<BamEntry>() == 4, $"Invalid BAM entry size ({Unsafe.SizeOf<BamEntry>()} bytes) instead of 4 bytes.");
         Debug.Assert(Unsafe.SizeOf<DirEntry>() == 32, $"Invalid directory entry size ({Unsafe.SizeOf<DirEntry>()} bytes) instead of 32 bytes.");
 
-        TotalSectors = TrackOffsets[MaxTracks] / SectorSize;
+        TotalSectors = (D64Size - 19 * SectorSize) / SectorSize; // 19 sectors are reserved for the BAM and directory entries
         _image = new byte[D64Size]; // Standard D64 size
         _tempSector = new byte[SectorSize]; // Temporary buffer for sector operations
         Format();
@@ -488,10 +488,9 @@ public class Disk64
         return TrackOffsets[track] + sector * SectorSize;
     }
 
-    private static byte NextInterleave(byte track, byte sector, int interleave)
+    private byte WrapSector(byte track, byte sector)
     {
         int maxSectorCount = SectorsPerTrack[track];
-        sector = (byte)(sector + interleave);
         if (sector >= maxSectorCount)
         {
             sector = (byte)(sector - maxSectorCount); // Wrap around if we exceed the maximum sector count
@@ -563,75 +562,80 @@ public class Disk64
         byte sector = 0;
         // We go from [1, MaxTracks]
         // and we will try to allocate sectors in a flip down and up pattern from the Bam track
-        for (int i = 1; i < MaxTracks + 1; i++)
+        for (int i = 1; i < MaxTracks; i++)
         {
-            if (i == MaxTracks)
+            switch (state)
             {
-                trackIndex = BamTrack;
+                case FreeSectorSearchMode.DownFlip:
+                    if (trackLow >= 1)
+                    {
+                        trackIndex = trackLow--;
+                        state = FreeSectorSearchMode.UpFlip;
+                    }
+                    else
+                    {
+                        state = FreeSectorSearchMode.ContinueUp;
+                        goto case FreeSectorSearchMode.ContinueUp;
+                    }
+
+                    break;
+                case FreeSectorSearchMode.UpFlip:
+                    if (trackHigh <= MaxTracks)
+                    {
+                        trackIndex = trackHigh++;
+                        state = FreeSectorSearchMode.DownFlip;
+                    }
+                    else
+                    {
+                        state = FreeSectorSearchMode.ContinueDown;
+                        goto case FreeSectorSearchMode.ContinueDown;
+                    }
+
+                    break;
+
+                case FreeSectorSearchMode.ContinueDown:
+                    if (trackLow >= 1)
+                    {
+                        trackIndex = trackLow--;
+                    }
+                    else
+                    {
+                        state = FreeSectorSearchMode.ContinueUp; // No more tracks to go down, switch to continue up
+                        goto case FreeSectorSearchMode.ContinueUp;
+                    }
+
+                    break;
+                case FreeSectorSearchMode.ContinueUp:
+                    if (trackHigh <= MaxTracks)
+                    {
+                        trackIndex = trackHigh++;
+                    }
+                    else
+                    {
+                        state = FreeSectorSearchMode.ContinueDown; // No more tracks to go up, switch to continue down
+                        goto case FreeSectorSearchMode.ContinueDown;
+                    }
+
+                    break;
             }
-            else
-            {
-                switch (state)
-                {
-                    case FreeSectorSearchMode.DownFlip:
-                        if (trackLow >= 1)
-                        {
-                            trackIndex = trackLow--;
-                            state = FreeSectorSearchMode.UpFlip;
-                        }
-                        else
-                        {
-                            state = FreeSectorSearchMode.ContinueUp;
-                            goto case FreeSectorSearchMode.ContinueUp;
-                        }
 
-                        break;
-                    case FreeSectorSearchMode.UpFlip:
-                        if (trackHigh <= MaxTracks)
-                        {
-                            trackIndex = trackHigh++;
-                            state = FreeSectorSearchMode.DownFlip;
-                        }
-                        else
-                        {
-                            state = FreeSectorSearchMode.ContinueDown;
-                            goto case FreeSectorSearchMode.ContinueDown;
-                        }
 
-                        break;
-
-                    case FreeSectorSearchMode.ContinueDown:
-                        if (trackLow >= 1)
-                        {
-                            trackIndex = trackLow--;
-                        }
-                        else
-                        {
-                            state = FreeSectorSearchMode.ContinueUp; // No more tracks to go down, switch to continue up
-                            goto case FreeSectorSearchMode.ContinueUp;
-                        }
-
-                        break;
-                    case FreeSectorSearchMode.ContinueUp:
-                        if (trackHigh <= MaxTracks)
-                        {
-                            trackIndex = trackHigh++;
-                        }
-                        else
-                        {
-                            state = FreeSectorSearchMode.ContinueDown; // No more tracks to go up, switch to continue down
-                            goto case FreeSectorSearchMode.ContinueDown;
-                        }
-
-                        break;
-                }
-            }
 
             var track = (byte)trackIndex;
+
             // Try to find a free sector on this track
             bool allocated = false;
-            while (TryAllocateSector(track, ref sector))
+            while (true)
             {
+                var nextSector = WrapSector(track, sector);
+
+                if (!TryAllocateSector(track, ref nextSector))
+                {
+                    break;
+                }
+
+                sector = nextSector;
+
                 sectors.Add((track, sector));
                 allocated = true;
 
@@ -641,7 +645,12 @@ public class Disk64
                     break;
                 }
 
-                sector = NextInterleave(track, sector, FileInterleave);
+                sector = (byte)(sector + FileInterleave);
+
+                if (track > BamTrack && IsSectorFree(track, 0))
+                {
+                    sector = 0;
+                }
             }
 
             if (sectors.Count == needed)
@@ -666,7 +675,7 @@ public class Disk64
         {
             foreach (var (track, sectorToFree) in sectors)
             {
-                SetSectorFree(track, sector, true);
+                SetSectorFree(track, sectorToFree, true);
             }
 
             throw new IOException("Disk is full. No free sectors available.");
@@ -737,7 +746,8 @@ public class Disk64
 
         while (GetFreeSectorsCount(BamTrack) > 0)
         {
-            sector = NextInterleave(track, sector, DirectoryEntryInterleave);
+            sector = (byte)(sector + DirectoryEntryInterleave);
+            sector = WrapSector(track, sector);
 
             if (TryAllocateSector(BamTrack, ref sector))
             {

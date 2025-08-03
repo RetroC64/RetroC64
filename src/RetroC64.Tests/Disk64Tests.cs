@@ -190,15 +190,69 @@ public class Disk64Tests
         {
             image.WriteFile($"HELLO{i}", tsData);
         }
+
         for (int i = maxFiles; i >= 1; i--)
         {
             image.DeleteFile($"HELLO{i}");
         }
+
         image.Save(fileGenerated);
 
         Assert.IsTrue(File.Exists(fileGenerated), $"Generated disk image file {fileGenerated} was not created.");
 
         AssertBinaries(fileExpected, fileGenerated);
+    }
+
+    /// <summary>
+    /// This test adds a file that is going to take all available sectors on the disk
+    /// </summary>
+    [TestMethod]
+    public async Task TestAddBiggestFile()
+    {
+        // We cannot compare to c1541 results here, as there is a slight difference in how c1541 stores the file content
+        // for the sectors above the bam track. It is unclear why this behavior in c1541, but I don't believe that the
+        // c1541 implementation is more right than the one here. So we just test that we can write and read back.
+        // The rules of interleaving are still respected.
+
+        var image = new Disk64
+        {
+            DiskName = "MYDISK",
+            DiskId = "01"
+        };
+
+        var maxSectorToAllocate = image.TotalSectors;
+
+        var t1Data = PrepareData("TLarge", maxSectorToAllocate * 254); // More than an entire track
+        var t1File = Path.Combine(AppContext.BaseDirectory, "TLARGE_generated.prg");
+        File.Delete(t1File);
+        File.WriteAllBytes(t1File, t1Data);
+
+        //File.Delete(fileExpected);
+        //var result = await RunC1541([
+        //    $"format MYDISK,01 d64 {fileExpected}",
+        //    $"write {t1File} LARGE,p",
+        //]);
+        //Console.WriteLine(result);
+
+        //Assert.IsTrue(File.Exists(fileExpected), $"Expected disk image file {fileExpected} was not created.");
+
+        var fileGenerated = Path.Combine(AppContext.BaseDirectory, "test_add_biggest_file_generated.d64");
+
+        image.WriteFile("TLARGE", t1Data);
+        image.Save(fileGenerated);
+
+        var t2Data = image.ReadFile("TLARGE");
+
+        CollectionAssert.AreEqual(t1Data, t2Data, "Reading back from the d64 is invalid");
+
+        // We still extract the file with cs1541 to ensure that the content is correct
+        File.Delete("TLARGE");
+        var result = await RunC1541([
+            $"attach  {fileGenerated}",
+            $"extract",
+        ]);
+
+        AssertBinaries("TLARGE", t1File);
     }
 
     private byte[] PrepareData(string name, int size)
