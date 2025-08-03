@@ -110,6 +110,97 @@ public class Disk64Tests
         AssertBinaries(fileExpected, fileGenerated);
     }
 
+    [TestMethod]
+    public async Task TestAddMaxFiles()
+    {
+        const string fileGenerated = "test_add_max_files_generated.d64";
+        const string fileExpected = "test_add_max_files_expected.d64";
+
+        var tsData = PrepareData("TS", 254);
+        var tsFile = Path.Combine(AppContext.BaseDirectory, "tsmall.prg");
+        File.Delete(tsFile);
+        File.WriteAllBytes(tsFile, tsData);
+
+        const int maxFiles = 144;
+
+        File.Delete(fileExpected);
+        var result = await RunC1541([
+            $"format MYDISK,01 d64 {fileExpected}",
+
+            ..
+            Enumerable.Range(1, maxFiles).Select(x => $"write {tsFile} HELLO{x},p")
+        ]);
+
+        Console.WriteLine(result);
+
+        Assert.IsTrue(File.Exists(fileExpected), $"Expected disk image file {fileExpected} was not created.");
+
+        File.Delete(fileGenerated);
+        var image = new Disk64
+        {
+            DiskName = "MYDISK",
+            DiskId = "01"
+        };
+        for (int i = 1; i <= maxFiles; i++)
+        {
+            image.WriteFile($"HELLO{i}", tsData);
+        }
+
+        image.Save(fileGenerated);
+
+        Assert.IsTrue(File.Exists(fileGenerated), $"Generated disk image file {fileGenerated} was not created.");
+
+        AssertBinaries(fileExpected, fileGenerated);
+    }
+
+    [TestMethod]
+    public async Task TestAddMaxFilesAndDeleteAll()
+    {
+        const string fileGenerated = "test_add_max_files_and_delete_all_generated.d64";
+        const string fileExpected = "test_add_max_files_and_delete_all_expected.d64";
+
+        var tsData = PrepareData("TS", 254);
+        var tsFile = Path.Combine(AppContext.BaseDirectory, "tsmall.prg");
+        File.Delete(tsFile);
+        File.WriteAllBytes(tsFile, tsData);
+
+        const int maxFiles = 144;
+
+        File.Delete(fileExpected);
+        var result = await RunC1541([
+            $"format MYDISK,01 d64 {fileExpected}",
+
+            ..
+            Enumerable.Range(1, maxFiles).Select(x => $"write {tsFile} HELLO{x},p"),
+            ..
+            Enumerable.Range(1, maxFiles).Reverse().Select(x => $"delete HELLO{x}")
+        ]);
+
+        Console.WriteLine(result);
+
+        Assert.IsTrue(File.Exists(fileExpected), $"Expected disk image file {fileExpected} was not created.");
+
+        File.Delete(fileGenerated);
+        var image = new Disk64
+        {
+            DiskName = "MYDISK",
+            DiskId = "01"
+        };
+        for (int i = 1; i <= maxFiles; i++)
+        {
+            image.WriteFile($"HELLO{i}", tsData);
+        }
+        for (int i = maxFiles; i >= 1; i--)
+        {
+            image.DeleteFile($"HELLO{i}");
+        }
+        image.Save(fileGenerated);
+
+        Assert.IsTrue(File.Exists(fileGenerated), $"Generated disk image file {fileGenerated} was not created.");
+
+        AssertBinaries(fileExpected, fileGenerated);
+    }
+
     private byte[] PrepareData(string name, int size)
     {
         // Create a byte array with a special layout matching the expected sector structure to more easily debug file layout content

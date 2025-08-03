@@ -18,7 +18,7 @@ namespace RetroC64.Disk;
 /// <remarks>
 /// Details from http://unusedino.de/ec64/technical/formats/d64.html
 ///
-/// This class currently supports only the standard D64 disk format with 35 tracks.
+/// This class currently supports only the standard D64 disk format with 35 tracks and no errors.
 /// </remarks>
 public class Disk64
 {
@@ -48,17 +48,6 @@ public class Disk64
 
     private const int SectorDataSize = 254; // Data size available in a sector (excluding header)
 
-    //private const int DirEntryCountPerSector = 8;
-    //private const int DirEntrySize = 32;
-
-    //private const int DirEntryFileTypeOffset = 0;
-    //private const int DirEntryStartTrackOffset = 1;
-    //private const int DirEntryStartSectorOffset = 2;
-    //private const int DirEntryFileNameOffset = 3;
-    //private const int DirEntryFileNameSize = 16;
-    //private const int DirEntry_REL_FileRecordLengthOffset = 21;
-    //private const int DirEntryFileSizeOffset = 28;
-
     private static ReadOnlySpan<byte> SectorsPerTrack => new byte[MaxTracks + 1]
     {
         0, // Track 0 (not used)
@@ -67,29 +56,12 @@ public class Disk64
         18, 18, 18, 18, 18, 18, // 25-30
         17, 17, 17, 17, 17 // 31-35
     };
-
-    private static readonly byte[] TrackOrderedByAccess =
-    [
-        ..
-        Enumerable.Range(1, 17).Reverse().Select(x => (byte)x).ToArray() // From 17 to 1
-        ,
-        ..
-        Enumerable.Range(19, 6).Select(x => (byte)x).ToArray() // From 19-24
-        ,
-        ..
-        Enumerable.Range(25, 6).Select(x => (byte)x).ToArray() // From 25-30
-        ,
-        ..
-        Enumerable.Range(31, 5).Select(x => (byte)x).ToArray() // From 31-35
-        ,
-        18, // BAM track
-    ];
     
     private static readonly int[] TrackOffsets = BuildTrackOffsets();
 
     private readonly byte[] _image;
 
-    private readonly byte[] _tempSector;
+    private readonly byte[] _tempSector; // Buffer kept for writing sector operations
 
     /// <summary>
     /// Gets the total number of sectors on the disk.
@@ -101,6 +73,7 @@ public class Disk64
     /// </summary>
     public Disk64()
     {
+        // We need to verify the sizes of the BAM, BAM entry, and directory entry
         Debug.Assert(Unsafe.SizeOf<Bam>() == 256, $"Invalid BAM size ({Unsafe.SizeOf<Bam>()} bytes) instead of 256 bytes.");
         Debug.Assert(Unsafe.SizeOf<BamEntry>() == 4, $"Invalid BAM entry size ({Unsafe.SizeOf<BamEntry>()} bytes) instead of 4 bytes.");
         Debug.Assert(Unsafe.SizeOf<DirEntry>() == 32, $"Invalid directory entry size ({Unsafe.SizeOf<DirEntry>()} bytes) instead of 32 bytes.");
@@ -159,10 +132,11 @@ public class Disk64
         for (int i = 0; i < MaxTracks; i++)
         {
             ref var bamEntry = ref bam.Entries[i];
-            bamEntry.Initialize(SectorsPerTrack[i + 1]);
-            if (i + 1 == BamTrack)
+            var track = i + 1;
+            bamEntry.Initialize(SectorsPerTrack[track]);
+            if (track == BamTrack)
             {
-                // The first 2 sectors of the BAM are track as reserved (0 and 1
+                // The first 2 sectors of the BAM track are reserved (0 and 1)
                 bamEntry.FreeSectors -= 2;
                 bamEntry.Bitmap[0] = false;
                 bamEntry.Bitmap[1] = false;
@@ -514,25 +488,10 @@ public class Disk64
         return TrackOffsets[track] + sector * SectorSize;
     }
 
-    private static string ReadPetsciiString(ReadOnlySpan<byte> span)
-    {
-        int len = span.IndexOf((byte)0xA0);
-        if (len < 0) len = span.Length;
-        return System.Text.Encoding.ASCII.GetString(span.Slice(0, len)).TrimEnd((char)0xA0);
-    }
-
-    private static void WritePetsciiString(Span<byte> span, string text)
-    {
-        var bytes = System.Text.Encoding.ASCII.GetBytes(text.ToUpperInvariant());
-        int len = Math.Min(bytes.Length, span.Length);
-        bytes.AsSpan(0, len).CopyTo(span);
-        if (len < span.Length) span.Slice(len).Fill(0xA0);
-    }
-
-    private static byte NextInterleave(byte track, byte sector)
+    private static byte NextInterleave(byte track, byte sector, int interleave)
     {
         int maxSectorCount = SectorsPerTrack[track];
-        sector = (byte)(sector + FileInterleave);
+        sector = (byte)(sector + interleave);
         if (sector >= maxSectorCount)
         {
             sector = (byte)(sector - maxSectorCount); // Wrap around if we exceed the maximum sector count
@@ -682,7 +641,7 @@ public class Disk64
                     break;
                 }
 
-                sector = NextInterleave(track, sector);
+                sector = NextInterleave(track, sector, FileInterleave);
             }
 
             if (sectors.Count == needed)
@@ -732,8 +691,9 @@ public class Disk64
 
     private void AddDirectoryEntry(string fileName, C64FileType fileType, byte startTrack, byte startSector, ushort sizeSectors)
     {
+        // Iterate on directory entries to find a free one
         byte track = BamTrack, sector = 1;
-        while (track != 0)
+        while (true)
         {
             var dirSector = GetSector(track, sector);
 
@@ -757,10 +717,55 @@ public class Disk64
                     return;
                 }
             }
+
+            if (nextTrack == 0)
+            {
+                break;
+            }
+
             track = nextTrack;
             sector = nextSector;
         }
-        throw new IOException("No free directory entry.");
+
+        // If we reach here, it means we didn't find a free directory entry
+        // We need to allocate a new directory sector with an interleave of 3 sectors
+
+        const int DirectoryEntryInterleave = 3;
+
+        // Find the next free sector in the BAM track
+        var previousLastSector = sector;
+
+        while (GetFreeSectorsCount(BamTrack) > 0)
+        {
+            sector = NextInterleave(track, sector, DirectoryEntryInterleave);
+
+            if (TryAllocateSector(BamTrack, ref sector))
+            {
+                // We found a free sector, write the new directory entry
+                var newDirSector = GetSector(BamTrack, sector);
+                newDirSector.Clear();
+                newDirSector[0] = 0; // No next track
+                newDirSector[1] = 0xFF; // Empty sector (254 + 1)
+
+                // Write the directory entry
+                ref var dirEntry = ref MemoryMarshal.Cast<byte, DirEntry>(newDirSector)[0];
+                dirEntry.FileType = ((FileType)fileType | FileType.ClosedFlag);
+                dirEntry.FileFirstTrack = startTrack;
+                dirEntry.FileFirstSector = startSector;
+                dirEntry.FileName = fileName;
+                dirEntry.RELFileRecordLength = 0;
+                dirEntry.Unused.Clear(); // clear unused bytes
+                dirEntry.FileSizeSectors = sizeSectors;
+
+                // Update the next track and sector in the BAM
+                var previousSectorData = GetSector(BamTrack, previousLastSector);
+                previousSectorData[0] = BamTrack; // Set next track to BAM track
+                previousSectorData[1] = sector; // Set next sector to the new directory sector
+                return;
+            }
+        }
+
+        throw new IOException("Disk is full. No free directory entries available.");
     }
 
     private static string Convert_PETSCII_TO_ASCII(Span<byte> span)
@@ -885,10 +890,7 @@ public class Disk64
         public string DiskName
         {
             get => Convert_PETSCII_TO_ASCII(DirNameSpan);
-            set
-            {
-                Write_ASCII_To_PETSCII(DirNameSpan, value.ToUpperInvariant());
-            }
+            set => Write_ASCII_To_PETSCII(DirNameSpan, value.ToUpperInvariant());
         }
 
         public byte ReservedA0;
