@@ -8,6 +8,9 @@ using RetroC64.Disk;
 
 namespace RetroC64.Tests;
 
+/// <summary>
+/// Tests for the <see cref="Disk64"/> class.
+/// </summary>
 [TestClass, RuntimeCondition("win-x64")]
 public class Disk64Tests
 {

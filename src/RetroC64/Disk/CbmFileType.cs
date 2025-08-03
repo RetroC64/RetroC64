@@ -4,7 +4,7 @@
 
 namespace RetroC64.Disk;
 
-public enum C64FileType : byte
+public enum CbmFileType : byte
 {
     DEL = 0x00,
     SEQ = 0x81,

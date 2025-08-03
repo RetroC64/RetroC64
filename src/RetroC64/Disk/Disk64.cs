@@ -308,10 +308,10 @@ public class Disk64
     /// <summary>
     /// Lists all directory entries on the disk.
     /// </summary>
-    /// <returns>A list of <see cref="C64DirectoryEntry"/> objects.</returns>
-    public List<C64DirectoryEntry> ListDirectory()
+    /// <returns>A list of <see cref="CbmDirectoryEntry"/> objects.</returns>
+    public List<CbmDirectoryEntry> ListDirectory()
     {
-        var entries = new List<C64DirectoryEntry>();
+        var entries = new List<CbmDirectoryEntry>();
         byte track = BamTrack, sector = 1;
         while (track != 0)
         {
@@ -324,9 +324,9 @@ public class Disk64
             foreach (ref var dirEntry in dirEntries)
             {
                 if ((dirEntry.FileType & FileType.ClosedFlag) == 0) continue; // not used
-                var entry = new C64DirectoryEntry
+                var entry = new CbmDirectoryEntry
                 {
-                    FileType = (C64FileType)(dirEntry.FileType & FileType.ValidMask),
+                    FileType = (CbmFileType)(dirEntry.FileType & FileType.ValidMask),
                     StartTrack = dirEntry.FileFirstTrack,
                     StartSector = dirEntry.FileFirstSector,
                     FileName = dirEntry.FileName,
@@ -357,7 +357,7 @@ public class Disk64
     /// </summary>
     /// <param name="entry">The directory entry of the file.</param>
     /// <returns>The file data as a byte array.</returns>
-    private byte[] ReadFile(C64DirectoryEntry entry)
+    private byte[] ReadFile(CbmDirectoryEntry entry)
     {
         var data = new List<byte>();
         byte track = entry.StartTrack, sector = entry.StartSector;
@@ -380,7 +380,7 @@ public class Disk64
     /// <param name="fileName">The file name to write.</param>
     /// <param name="data">The file data.</param>
     /// <param name="fileType">The file type (default is PRG).</param>
-    public void WriteFile(string fileName, ReadOnlySpan<byte> data, C64FileType fileType = C64FileType.PRG)
+    public void WriteFile(string fileName, ReadOnlySpan<byte> data, CbmFileType fileType = CbmFileType.PRG)
     {
         // Remove existing file if present
         var existing = ListDirectory().FirstOrDefault(e => e.FileName.Trim().Equals(fileName, StringComparison.OrdinalIgnoreCase));
@@ -698,7 +698,7 @@ public class Disk64
         }
     }
 
-    private void AddDirectoryEntry(string fileName, C64FileType fileType, byte startTrack, byte startSector, ushort sizeSectors)
+    private void AddDirectoryEntry(string fileName, CbmFileType fileType, byte startTrack, byte startSector, ushort sizeSectors)
     {
         // Iterate on directory entries to find a free one
         byte track = BamTrack, sector = 1;

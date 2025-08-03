@@ -4,9 +4,9 @@
 
 namespace RetroC64.Disk;
 
-public record C64DirectoryEntry
+public record CbmDirectoryEntry
 {
-    public C64FileType FileType { get; set; }
+    public CbmFileType FileType { get; set; }
 
     public string FileName { get; set; } = "";
 
