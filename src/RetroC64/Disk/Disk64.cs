@@ -383,7 +383,7 @@ public class Disk64
     /// </summary>
     /// <param name="entry">The directory entry of the file.</param>
     /// <returns>The file data as a byte array.</returns>
-    public byte[] ReadFile(C64DirectoryEntry entry)
+    private byte[] ReadFile(C64DirectoryEntry entry)
     {
         var data = new List<byte>();
         byte track = entry.StartTrack, sector = entry.StartSector;
@@ -411,7 +411,7 @@ public class Disk64
         // Remove existing file if present
         var existing = ListDirectory().FirstOrDefault(e => e.FileName.Trim().Equals(fileName, StringComparison.OrdinalIgnoreCase));
         if (existing != null)
-            DeleteFile(existing);
+            DeleteFile(fileName);
 
         // Allocate sectors
         var sectors = AllocateSectorsForFile(data.Length);
@@ -453,8 +453,7 @@ public class Disk64
     /// <summary>
     /// Deletes a file from the disk.
     /// </summary>
-    /// <param name="entry">The directory entry of the file to delete.</param>
-    public void DeleteFile(C64DirectoryEntry entry)
+    public void DeleteFile(string fileName)
     {
         // Mark directory entry as deleted
         byte track = BamTrack, sector = 1;
@@ -470,11 +469,11 @@ public class Disk64
             {
                 if ((dirEntry.FileType & FileType.ClosedFlag) == 0) continue;
                 string name = dirEntry.FileName;
-                if (name.Trim().Equals(entry.FileName.Trim(), StringComparison.OrdinalIgnoreCase))
+                if (name.Trim().Equals(fileName.Trim(), StringComparison.OrdinalIgnoreCase))
                 {
-                    dirEntry.FileType &= ~FileType.ClosedFlag; // Mark as deleted
+                    dirEntry.FileType = 0;
                     // Free sectors
-                    FreeFileSectors(entry.StartTrack, entry.StartSector);
+                    FreeFileSectors(dirEntry.FileFirstTrack, dirEntry.FileFirstSector);
                     return;
                 }
             }
@@ -624,6 +623,7 @@ public class Disk64
                         else
                         {
                             state = FreeSectorSearchMode.ContinueUp;
+                            goto case FreeSectorSearchMode.ContinueUp;
                         }
 
                         break;
@@ -636,13 +636,11 @@ public class Disk64
                         else
                         {
                             state = FreeSectorSearchMode.ContinueDown;
+                            goto case FreeSectorSearchMode.ContinueDown;
                         }
 
                         break;
-                }
 
-                switch (state)
-                {
                     case FreeSectorSearchMode.ContinueDown:
                         if (trackLow >= 1)
                         {
@@ -925,12 +923,12 @@ public class Disk64
 
         public byte DOSTypeHigh;
 
-        private fixed byte _reservedA7AB[0xAB - 0xA7];
+        private fixed byte _reservedA7AA[0xAB - 0xA7];
 
         /// <summary>
         /// Reserved bytes (0xA7 - 0xAA), filled with 0xA0.
         /// </summary>
-        public Span<byte> ReservedA7AA => MemoryMarshal.CreateSpan(ref _reservedA7AB[0], 0xAA - 0xA7 + 1);
+        public Span<byte> ReservedA7AA => MemoryMarshal.CreateSpan(ref _reservedA7AA[0], 0xAA - 0xA7 + 1);
 
         private fixed byte _reservedABFF[0x100 - 0xAB];
 

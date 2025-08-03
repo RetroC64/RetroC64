@@ -31,6 +31,43 @@ public class Disk64Tests
     }
 
     [TestMethod]
+    public async Task TestAddFileAndDelete()
+    {
+        const string fileGenerated = "test_add_file_and_delete_generated.d64";
+        const string fileExpected = "test_add_file_and_delete_expected.d64";
+
+        var t1Data = PrepareData("T1", 21 * 254 + 32); // More than an entire track
+        var t1File = Path.Combine(AppContext.BaseDirectory, "t1.prg");
+        File.Delete(t1File);
+        File.WriteAllBytes(t1File, t1Data);
+
+        File.Delete(fileExpected);
+        var result = await RunC1541([
+            $"format MYDISK,01 d64 {fileExpected}",
+            $"write {t1File} HELLO1,p",
+            $"delete HELLO1",
+        ]);
+
+        Console.WriteLine(result);
+
+        Assert.IsTrue(File.Exists(fileExpected), $"Expected disk image file {fileExpected} was not created.");
+
+        var image = new Disk64
+        {
+            DiskName = "MYDISK",
+            DiskId = "01"
+        };
+        image.WriteFile("HELLO1", t1Data);
+        image.DeleteFile("HELLO1");
+        File.Delete(fileGenerated);
+        image.Save(fileGenerated);
+
+        Assert.IsTrue(File.Exists(fileGenerated), $"Generated disk image file {fileGenerated} was not created.");
+
+        AssertBinaries(fileExpected, fileGenerated);
+    }
+    
+    [TestMethod]
     public async Task TestAddFile()
     {
         const string fileGenerated = "test_add_file_generated.d64";
