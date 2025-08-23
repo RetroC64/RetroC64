@@ -9,6 +9,14 @@ using System.Runtime.InteropServices;
 
 namespace RetroC64.Packers;
 
+/// <summary>
+/// Implements the ZX0 compression algorithm.
+/// This class uses a kind of "beam search" algorithm to find near optimal compression paths while staying much faster than exhaustive search.
+/// It supports both forward and backward compression, as well as quick (ZX7) mode.
+/// </summary>
+/// <remarks>
+/// This class can be reused for multiple compressions, but it is not thread-safe.
+/// </remarks>
 public unsafe class Zx0Compressor
 {
     // Block buffer size so that we make sure it goes to LOH (> 85 KB)
@@ -29,7 +37,7 @@ public unsafe class Zx0Compressor
     private const int MinMatchCandidatesToConsiderWithoutLookingAtTheScore = 16; // Minimum number of match candidates to consider without looking at the score
     private const int MaxMatchCandidates = 32; // Maximum number of match candidates to consider
     private const int MaxForwardParseInserts = 16; // Maximum number of forward parse inserts to consider
-    private const int FastBucketSurvivorSize = 8; 
+    private const int FastBucketSurvivorSize = 8;
     private const int BestBucketSurvivorSize = 16;
     private int _bucketSurvivorSize = BestBucketSurvivorSize; // Maximum number of survivors in a bucket
     private Bucket?[] _buckets;
@@ -39,14 +47,18 @@ public unsafe class Zx0Compressor
 
     private Block[] _blockBuffer;
     private int _blockPoolIndex;
-    
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Zx0Compressor"/> class.
+    /// </summary>
+    /// <param name="outputBuffer">Optional output buffer to use for compression results.</param>
     public Zx0Compressor(byte[]? outputBuffer = null)
     {
         _output = outputBuffer ?? [];
         _buckets = [];
         _blockBuffer = GC.AllocateUninitializedArray<Block>(BlockBufferSize, true);
     }
-    
+
     /// <summary>
     /// Compresses the input data using ZX0 algorithm.
     /// </summary>
@@ -56,6 +68,9 @@ public unsafe class Zx0Compressor
     /// <param name="invertMode">Invert mode</param>
     /// <param name="quickMode">Use quick (ZX7) mode</param>
     /// <returns>Compressed data</returns>
+    /// <remarks>
+    /// The return buffer is valid until the next call to <see cref="Compress(byte[], int, bool, bool, bool)"/>.
+    /// </remarks>
     public Span<byte> Compress(byte[] input, int skip = 0, bool backwardsMode = false, bool invertMode = true, bool quickMode = false)
     {
         return Compress(input, out _, skip, backwardsMode, invertMode, quickMode);
@@ -65,32 +80,36 @@ public unsafe class Zx0Compressor
     /// Compresses the input data using ZX0 algorithm.
     /// </summary>
     /// <param name="input">Input data</param>
+    /// <param name="delta">Returns the difference between output and input size (for overlapping decompression).</param>
     /// <param name="skip">Number of bytes to skip at the beginning</param>
     /// <param name="backwardsMode">Compress backwards</param>
     /// <param name="invertMode">Invert mode</param>
     /// <param name="quickMode">Use quick (ZX7) mode</param>
     /// <returns>Compressed data</returns>
+    /// <remarks>
+    /// The return buffer is valid until the next call to <see cref="Compress(byte[], int, bool, bool, bool)"/>.
+    /// </remarks>
     public Span<byte> Compress(byte[] input, out int delta, int skip = 0, bool backwardsMode = false, bool invertMode = true, bool quickMode = false)
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
 
-        const int MAX_OFFSET_ZX0 = 32640;
-        const int MAX_OFFSET_ZX7 = 2176;
-        int offsetLimit = quickMode ? MAX_OFFSET_ZX7 : MAX_OFFSET_ZX0;
+        const int maxOffsetZx0 = 32640;
+        const int maxOffsetZx7 = 2176;
+        int offsetLimit = quickMode ? maxOffsetZx7 : maxOffsetZx0;
 
         _bucketSurvivorSize = quickMode ? FastBucketSurvivorSize : BestBucketSurvivorSize; // Set the maximum bucket survivor size based on the mode
 
         fixed (byte* inputPtr = input)
         {
-            byte* input_data = inputPtr;
+            byte* inputData = inputPtr;
             if (backwardsMode)
             {
                 input.AsSpan().Reverse();
             }
 
-            var block = Optimize(input_data, input.Length, skip, offsetLimit);
+            var block = Optimize(inputData, input.Length, skip, offsetLimit);
 
-            var compressed = CompressInternal(block, input_data, input.Length, skip, backwardsMode, invertMode, out delta);
+            var compressed = CompressInternal(block, inputData, input.Length, skip, backwardsMode, invertMode, out delta);
 
             FreeAllBuckets();
             FreeBlockBuffers();
@@ -104,6 +123,9 @@ public unsafe class Zx0Compressor
         }
     }
 
+    /// <summary>
+    /// Releases all block buffers and resets the block pool.
+    /// </summary>
     private void FreeBlockBuffers()
     {
         foreach (var buffer in _usedBlockBuffers)
@@ -115,6 +137,9 @@ public unsafe class Zx0Compressor
         _blockPoolIndex = 0;
     }
 
+    /// <summary>
+    /// Finds the best matches for the current index in the input span.
+    /// </summary>
     private void FindBestMatches(int index, Span<byte> span, int maxOffset, int lastOffset, bool previousIsLiteral)
     {
         var matches = _bestMatches;
@@ -132,10 +157,10 @@ public unsafe class Zx0Compressor
         // 2.  Try new-offset matches (copy)
         var spanShort = MemoryMarshal.Cast<byte, ushort>(span.Slice(index));
         if (spanShort.Length == 0) return;
-        
+
         var indices = _mapPrefix2ToPositions.GetPositions(spanShort[0]);
         if (indices.Length == 0) return;
-        
+
         indices = indices.Slice(0, indices.BinarySearch(index));
         double bestScore = double.MaxValue;
         for (int i = indices.Length - 1; i >= 0; i--)
@@ -173,6 +198,9 @@ public unsafe class Zx0Compressor
         }
     }
 
+    /// <summary>
+    /// Releases all buckets and their blocks.
+    /// </summary>
     private void FreeAllBuckets()
     {
         var buckets = _buckets;
@@ -186,11 +214,14 @@ public unsafe class Zx0Compressor
             }
             bucket.Clear(); // Clear the bucket
             _freeBuckets.Add(bucket); // Add it back to the free buckets
-            buckets[i]  = null;
+            buckets[i] = null;
         }
     }
 
-    private unsafe Block* Optimize(byte* input, int size, int skip, int offsetLimit)
+    /// <summary>
+    /// Runs the dynamic programming optimization to find the best compression path.
+    /// </summary>
+    private Block* Optimize(byte* input, int size, int skip, int offsetLimit)
     {
         int maxOffset = OffsetCeiling(size - 1, offsetLimit);
 
@@ -203,13 +234,12 @@ public unsafe class Zx0Compressor
         {
             _buckets = new Bucket?[size];
         }
-        
+
         _buckets[0] = NewBucketItem(); // Initialize the first bucket
         var previousBucket = _buckets[0]!;
         var previousIndex = 0;
         InsertIntoBucket(previousBucket, LiteralCostBits(1), 0, 1, 1, true, null);
         var bestMatches = _bestMatches;
-        var clock = Stopwatch.StartNew();
         ref var bucketRef = ref MemoryMarshal.GetArrayDataReference(_buckets);
         for (int index = skip + 1; index < size; index++)
         {
@@ -227,14 +257,6 @@ public unsafe class Zx0Compressor
                 // Find best matches for the current index
                 FindBestMatches(index, span, maxOffset, block->Offset, block->IsLiteral);
 
-                // Dump matches to console for debugging
-                //Console.WriteLine($"At index {index}, previous block: {blockIt}");
-                //foreach (var match in bestMatches)
-                //{
-                //    Console.WriteLine($"- match {match}");
-                //}
-                //Console.WriteLine();
-
                 foreach (var match in CollectionsMarshal.AsSpan(bestMatches))
                 {
                     bool isRepeat = match.IsRepeat;
@@ -245,7 +267,6 @@ public unsafe class Zx0Compressor
                     {
                         for (int i = 1; i <= length; i++)
                         {
-                            //if (index + i >= input_size) break; // Prevent out of bounds access
                             // While a repeat of 1 is possible, a copy of 1 is not, so we skip it
                             if (!isRepeat && i == 1) continue;
 
@@ -268,21 +289,6 @@ public unsafe class Zx0Compressor
                 }
             }
 
-            //{
-            //    // Dump bucket to console
-            //    foreach (var block in previousBucket)
-            //    {
-            //        Console.WriteLine($"Bucket[{index}] {block}");
-            //    }
-            //    Console.WriteLine();
-            //}
-
-
-            //if (index != highestIndex)
-            //{
-            //    Console.WriteLine($"Jump to {highestIndex} vs {index} (Jump length: {highestIndex - index})");
-            //}
-
             // Release all previous buckets that are no longer needed (including the one that we skipped)
             for (int i = previousIndex; i < highestIndex; i++)
             {
@@ -291,14 +297,13 @@ public unsafe class Zx0Compressor
                 ReleaseBucket(bucket);
                 bucket = null;
             }
-            //previousBucket = nextBucket; // Move to the next bucket
 
             previousBucket = Unsafe.Add(ref bucketRef, highestIndex);
             Debug.Assert(previousBucket is not null && previousBucket.Count > 0);
             previousIndex = index;
             index = highestIndex; // Move the index to the highest index found in this iteration
         }
-        
+
         // Revert
         var lastBucket = _buckets[size - 1]!;
         var firstBlock = (Block*)lastBucket[0];
@@ -309,7 +314,6 @@ public unsafe class Zx0Compressor
         return firstBlock;
     }
 
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private Bucket GetOrCreateBucket(ref Bucket? bucRef, int index)
     {
@@ -317,7 +321,10 @@ public unsafe class Zx0Compressor
         ref var bucket = ref Unsafe.Add(ref bucRef, index);
         return bucket ??= NewBucketItem();
     }
-    
+
+    /// <summary>
+    /// Allocates a new bucket, reusing from the free list if possible.
+    /// </summary>
     private Bucket NewBucketItem()
     {
         if (_freeBuckets.Count > 0)
@@ -329,19 +336,24 @@ public unsafe class Zx0Compressor
         return new Bucket(_bucketSurvivorSize); // Create a new bucket item if no free buckets are available
     }
 
+    /// <summary>
+    /// Releases all blocks in a bucket and returns the bucket to the free list.
+    /// </summary>
     private void ReleaseBucket(Bucket bucket)
     {
         var span = bucket.AsSpan();
-        for (var i = 0; i < span.Length; i++)
+        foreach (var block in span)
         {
-            var block = span[i];
             ReleaseBlock(block); // Release each block in the bucket
         }
 
         bucket.Clear(); // Clear the bucket
         _freeBuckets.Add(bucket); // Add it back to the free buckets
     }
-    
+
+    /// <summary>
+    /// Inserts a block into a bucket, maintaining survivor size and dominance rules.
+    /// </summary>
     private void InsertIntoBucket(Bucket bucket, int encodedBits, int index, int offset, int length, bool isLiteral, Block* nextPosition)
     {
         if (isLiteral)
@@ -384,7 +396,6 @@ public unsafe class Zx0Compressor
             }
         }
 
-
         for (int i = 0; i < bucket.Count; i++)
         {
             Block* s = bucket[i];
@@ -413,6 +424,9 @@ public unsafe class Zx0Compressor
         }
     }
 
+    /// <summary>
+    /// Allocates a new block from the block pool.
+    /// </summary>
     private Block* AllocateBlock()
     {
     allocateAgain:
@@ -439,6 +453,9 @@ public unsafe class Zx0Compressor
         goto allocateAgain;
     }
 
+    /// <summary>
+    /// Creates a new block, possibly merging with a previous literal block.
+    /// </summary>
     private Block* NewBlock(int totalEncodedBits, int index, int offset, int length, bool literal, Block* nextPosition)
     {
         Block* block;
@@ -449,7 +466,7 @@ public unsafe class Zx0Compressor
         }
         else
         {
-            block = AllocateBlock(); // TODO Add refcnew Block();
+            block = AllocateBlock();
         }
 
         // If previous position is a literal, we keep it going
@@ -477,6 +494,9 @@ public unsafe class Zx0Compressor
         return block;
     }
 
+    /// <summary>
+    /// Releases a block and its next position if no longer referenced.
+    /// </summary>
     private void ReleaseBlock(Block* block)
     {
     freeNextBlock:
@@ -498,7 +518,10 @@ public unsafe class Zx0Compressor
         }
     }
 
-    private Span<byte> CompressInternal(Block* head, byte* input, int size, int skip, bool backwardsMode, bool invertMode, out int delta)
+    /// <summary>
+    /// Encodes the block chain into the output buffer.
+    /// </summary>
+    private Span<byte> CompressInternal(Block* head, byte* input, int inputSize, int skip, bool backwardsMode, bool invertMode, out int delta)
     {
         var outputSize = (head->EncodedBits + 25) / 8;
 
@@ -512,12 +535,12 @@ public unsafe class Zx0Compressor
             head = nextPosition;
         }
         head = previousBlock; // Now head points to the first block in the reversed list
-        
+
         if (_output.Length < outputSize)
         {
             _output = new byte[outputSize];
         }
-        _diff = outputSize -  size + skip;
+        _diff = outputSize - inputSize + skip;
         delta = 0;
         _inputIndex = skip;
         _outputIndex = 0;
@@ -533,8 +556,6 @@ public unsafe class Zx0Compressor
             int length = block->Length;
             if (block->IsLiteral)
             {
-                //Console.WriteLine($"[{input_index}]/[{output_index}] LITERAL {length} bytes");
-
                 // copy literals indicator
                 WriteBit(0);
                 // copy literals length
@@ -548,8 +569,6 @@ public unsafe class Zx0Compressor
             }
             else if (block->Offset == lastOffset)
             {
-                //Console.WriteLine($"[{input_index}]/[{output_index}] REPEAT {length} bytes. From index: {input_index - block.Offset} - offset: {block.Offset}");
-
                 // copy from last offset indicator
                 WriteBit(0);
                 // copy from last offset length
@@ -558,8 +577,6 @@ public unsafe class Zx0Compressor
             }
             else
             {
-                //Console.WriteLine($"[{input_index}]/[{output_index}] COPY {length} bytes from index {input_index - block.Offset}");
-
                 // copy from new offset indicator
                 WriteBit(1);
                 // copy from new offset MSB
@@ -589,7 +606,6 @@ public unsafe class Zx0Compressor
         WriteInterlacedEliasGamma(256, backwardsMode, invertMode);
 
         Debug.Assert(outputSize >= _outputIndex);
-
         return new Span<byte>(_output, 0, _outputIndex);
     }
 
@@ -602,25 +618,37 @@ public unsafe class Zx0Compressor
             delta = _diff;
     }
 
+    /// <summary>
+    /// Writes a byte to the output buffer, resizing if necessary.
+    /// </summary>
     private void WriteByte(int value)
     {
-        if (_outputIndex >= _output.Length)
+        var outputIndex = _outputIndex;
+        var output = _output;
+        if (outputIndex >= output.Length)
         {
             // Resize output data if needed
-            Array.Resize(ref _output, _output.Length * 2);
+            Array.Resize(ref output, output.Length * 2);
+            _output = output;
         }
 
-        _output[_outputIndex++] = (byte)value;
+        output[outputIndex] = (byte)value;
+        _outputIndex = outputIndex + 1;
         _diff--;
     }
 
+    /// <summary>
+    /// Writes a bit to the output buffer, handling backtrack and bitmask logic.
+    /// </summary>
     private void WriteBit(int value)
     {
+        var outputIndex = _outputIndex;
+        var output = _output;
         if (_backtrack)
         {
             if (value != 0)
             {
-                _output[_outputIndex - 1] |= 1;
+                output[outputIndex - 1] |= 1;
             }
             _backtrack = false;
         }
@@ -629,36 +657,39 @@ public unsafe class Zx0Compressor
             if (_bitMask == 0)
             {
                 _bitMask = 128;
-                _bitIndex = _outputIndex;
+                _bitIndex = outputIndex;
                 WriteByte(0);
             }
 
             if (value != 0)
             {
-                _output[_bitIndex] |= (byte)_bitMask;
+                output[_bitIndex] |= (byte)_bitMask;
             }
 
             _bitMask >>= 1;
         }
     }
 
-    private void WriteInterlacedEliasGamma(int value, bool backwards_mode, bool invert_mode)
+    /// <summary>
+    /// Writes an interlaced Elias gamma encoded value to the output buffer.
+    /// </summary>
+    private void WriteInterlacedEliasGamma(int value, bool backwardsMode, bool invertMode)
     {
         int i;
         for (i = 2; i <= value; i <<= 1) ;
         i >>= 1;
         while ((i >>= 1) != 0)
         {
-            WriteBit(backwards_mode ? 1 : 0);
-            WriteBit(invert_mode ? ((value & i) == 0 ? 1 : 0) : ((value & i) != 0 ? 1 : 0));
+            WriteBit(backwardsMode ? 1 : 0);
+            WriteBit(invertMode ? ((value & i) == 0 ? 1 : 0) : ((value & i) != 0 ? 1 : 0));
         }
-        WriteBit(!backwards_mode ? 1 : 0);
+        WriteBit(!backwardsMode ? 1 : 0);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int OffsetCeiling(int index, int offset_limit)
+    private static int OffsetCeiling(int index, int offsetLimit)
     {
-        if (index > offset_limit) return offset_limit;
+        if (index > offsetLimit) return offsetLimit;
         return index < 1 ? 1 : index;
     }
 
@@ -686,11 +717,18 @@ public unsafe class Zx0Compressor
            EliasGammaBits((offset - 1) / 128 + 1) + 8 /*LSB*/ +
            EliasGammaBits(len - 1) - 1; // backtrack = true
 
+    /// <summary>
+    /// Represents a bucket of survivor blocks for dynamic programming.
+    /// </summary>
     private class Bucket(int capacity) : List<BlockPtr>(capacity)
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Span<BlockPtr> AsSpan() => CollectionsMarshal.AsSpan(this);
     }
 
+    /// <summary>
+    /// Pointer wrapper for Block* to allow use in generic collections.
+    /// </summary>
     private readonly struct BlockPtr(Block* value)
     {
         public readonly Block* Value = value;
@@ -706,6 +744,9 @@ public unsafe class Zx0Compressor
         public static implicit operator BlockPtr(Block* ptr) => new(ptr);
     }
 
+    /// <summary>
+    /// Represents a block in the compression path.
+    /// </summary>
     private struct Block
     {
         public Block* NextPosition;
@@ -719,9 +760,12 @@ public unsafe class Zx0Compressor
         public override string ToString() => $"Block(Index: {Index}, Offset: {Offset}, Length: {Length}, IsLiteral: {IsLiteral}, EncodedBits: {EncodedBits})";
     }
 
-    // 8 bytes
+    /// <summary>
+    /// Represents a match result (repeat or copy) for compression.
+    /// </summary>
     private readonly struct MatchResult(bool isRepeat, int offset, int length)
     {
+        // 8 bytes
         private readonly ulong _value = (((ulong)((uint)offset | (isRepeat ? 0x8000_0000U : 0))) << 32) | (uint)length;
 
         public int Length => (int)(uint)_value;
@@ -733,6 +777,9 @@ public unsafe class Zx0Compressor
         public override string ToString() => $"{(IsRepeat ? "Repeat" : "Copy")} - Offset: {Offset}, Length: {Length}";
     }
 
+    /// <summary>
+    /// Maps 2-byte prefixes to their positions in the input buffer for fast match finding.
+    /// </summary>
     private struct PrefixMap()
     {
         private readonly ulong[] _mapShortToRange = new ulong[ushort.MaxValue + 1];
