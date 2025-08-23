@@ -26,12 +26,12 @@ public unsafe class Zx0Compressor
     private PrefixMap _mapPrefix2ToPositions = new();
     private readonly List<MatchResult> _bestMatches = new(MaxMatchCandidates);
 
-    private const int MinMatchCandidatesToConsiderWithoutLookingAtTheScore = 4; // Minimum number of match candidates to consider without looking at the score
-    private const int MaxMatchCandidates = 8; // Maximum number of match candidates to consider
+    private const int MinMatchCandidatesToConsiderWithoutLookingAtTheScore = 16; // Minimum number of match candidates to consider without looking at the score
+    private const int MaxMatchCandidates = 32; // Maximum number of match candidates to consider
     private const int MaxForwardParseInserts = 16; // Maximum number of forward parse inserts to consider
-    private const int FastBucketSurvivorSize = 2; 
+    private const int FastBucketSurvivorSize = 8; 
     private const int BestBucketSurvivorSize = 16;
-    private int _bucketSurvivorSize = FastBucketSurvivorSize; // Maximum number of survivors in a bucket
+    private int _bucketSurvivorSize = BestBucketSurvivorSize; // Maximum number of survivors in a bucket
     private Bucket?[] _buckets;
 
     private readonly List<Block[]> _usedBlockBuffers = new();
@@ -302,19 +302,11 @@ public unsafe class Zx0Compressor
         // Revert
         var lastBucket = _buckets[size - 1]!;
         var firstBlock = (Block*)lastBucket[0];
-        Block* previousBlock = null;
-        while (firstBlock is not null)
-        {
-            var nextPosition = firstBlock->NextPosition;
-            firstBlock->NextPosition = previousBlock; // Reverse the next position link
-            previousBlock = firstBlock;
-            firstBlock = nextPosition;
-        }
 
         // The last bucket is cleared manually here as the objects are reversed
         lastBucket.RemoveAt(0);
 
-        return previousBlock!;
+        return firstBlock;
     }
 
 
@@ -416,13 +408,8 @@ public unsafe class Zx0Compressor
         // If we reach here, we need to add the new block at the end of the bucket
         if (bucket.Count < _bucketSurvivorSize)
         {
-            // If the bucket is not full, just add the new block
-            //var previousBlock = bucket[^1];
-            //if (previousBlock.Index != index && previousBlock.Offset != offset && previousBlock.Length != length)
-            {
-                var newBlock = NewBlock(encodedBits, index, offset, length, isLiteral, nextPosition);
-                bucket.Add(newBlock);
-            }
+            var newBlock = NewBlock(encodedBits, index, offset, length, isLiteral, nextPosition);
+            bucket.Add(newBlock);
         }
     }
 
@@ -513,12 +500,24 @@ public unsafe class Zx0Compressor
 
     private Span<byte> CompressInternal(Block* head, byte* input, int size, int skip, bool backwardsMode, bool invertMode, out int delta)
     {
-        var outputSize = size * 2;
+        var outputSize = (head->EncodedBits + 25) / 8;
+
+        // Reverse the linked list of blocks to get them in the correct order
+        Block* previousBlock = null;
+        while (head is not null)
+        {
+            var nextPosition = head->NextPosition;
+            head->NextPosition = previousBlock; // Reverse the next position link
+            previousBlock = head;
+            head = nextPosition;
+        }
+        head = previousBlock; // Now head points to the first block in the reversed list
+        
         if (_output.Length < outputSize)
         {
             _output = new byte[outputSize];
         }
-        _diff = 0;
+        _diff = outputSize -  size + skip;
         delta = 0;
         _inputIndex = skip;
         _outputIndex = 0;
@@ -579,7 +578,7 @@ public unsafe class Zx0Compressor
                 lastOffset = block->Offset;
             }
 
-            var previousBlock = block;
+            previousBlock = block;
             var nextBlock = block->NextPosition;
             block->NextPosition = null;
             block = nextBlock;
@@ -588,6 +587,8 @@ public unsafe class Zx0Compressor
         // end marker
         WriteBit(1);
         WriteInterlacedEliasGamma(256, backwardsMode, invertMode);
+
+        Debug.Assert(outputSize >= _outputIndex);
 
         return new Span<byte>(_output, 0, _outputIndex);
     }
@@ -662,12 +663,12 @@ public unsafe class Zx0Compressor
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int EliasGammaBits(int value)
+    public static int EliasGammaBits(int value)
     {
         Debug.Assert(value > 0);
         return (32 - BitOperations.LeadingZeroCount((uint)value) - 1) * 2 + 1;
     }
-    
+
     // Cost for 1 literal of length L
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int LiteralCostBits(int len)              // len ≥1
@@ -683,7 +684,7 @@ public unsafe class Zx0Compressor
     private static int CopyCostBits(int offset, int len)     // len ≥2
         => 1 /*flag*/ +
            EliasGammaBits((offset - 1) / 128 + 1) + 8 /*LSB*/ +
-           EliasGammaBits(len - 1);
+           EliasGammaBits(len - 1) - 1; // backtrack = true
 
     private class Bucket(int capacity) : List<BlockPtr>(capacity)
     {
