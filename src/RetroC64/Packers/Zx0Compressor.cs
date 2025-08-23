@@ -2,7 +2,6 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -24,8 +23,7 @@ public unsafe class Zx0Compressor
     private bool _backtrack;
     private readonly List<BlockPtr> _freeBlocks = new();
     private readonly List<Bucket> _freeBuckets = new();
-    private readonly Dictionary<ushort, List<int>> _mapPrefix2ToPositions = new();
-    private readonly List<List<int>> _freeMatchPositionLists = new();
+    private PrefixMap _mapPrefix2ToPositions = new();
     private readonly List<MatchResult> _bestMatches = new(MaxMatchCandidates);
 
     private const int MinMatchCandidatesToConsiderWithoutLookingAtTheScore = 4; // Minimum number of match candidates to consider without looking at the score
@@ -94,7 +92,6 @@ public unsafe class Zx0Compressor
 
             var compressed = CompressInternal(block, input_data, input.Length, skip, backwardsMode, invertMode, out delta);
 
-            FreeMatchPositionList();
             FreeAllBuckets();
             FreeBlockBuffers();
 
@@ -118,17 +115,6 @@ public unsafe class Zx0Compressor
         _blockPoolIndex = 0;
     }
 
-    private void FreeMatchPositionList()
-    {
-        foreach (var keyPair in _mapPrefix2ToPositions)
-        {
-            var list = keyPair.Value;
-            _freeMatchPositionLists.Add(list);
-            list.Clear();
-        }
-        _mapPrefix2ToPositions.Clear();
-    }
-
     private void FindBestMatches(int index, Span<byte> span, int maxOffset, int lastOffset, bool previousIsLiteral)
     {
         var matches = _bestMatches;
@@ -145,42 +131,43 @@ public unsafe class Zx0Compressor
 
         // 2.  Try new-offset matches (copy)
         var spanShort = MemoryMarshal.Cast<byte, ushort>(span.Slice(index));
-        if (spanShort.Length > 0 && _mapPrefix2ToPositions.TryGetValue(spanShort[0], out var list))
+        if (spanShort.Length == 0) return;
+        
+        var indices = _mapPrefix2ToPositions.GetPositions(spanShort[0]);
+        if (indices.Length == 0) return;
+        
+        indices = indices.Slice(0, indices.BinarySearch(index));
+        double bestScore = double.MaxValue;
+        for (int i = indices.Length - 1; i >= 0; i--)
         {
-            var indices = CollectionsMarshal.AsSpan(list);
-            indices = indices.Slice(0, indices.BinarySearch(index));
-            double bestScore = double.MaxValue;
-            for (int i = indices.Length - 1; i >= 0; i--)
+            int off = index - indices[i];
+            if (off > maxOffset) break;
+
+            int len = span.Slice(index - off).CommonPrefixLength(span[index..]);
+            int cost = CopyCostBits(off, len);
+            var score = (double)cost / len; // Score is cost per length
+            if ((matches.Count < MinMatchCandidatesToConsiderWithoutLookingAtTheScore || score < bestScore))
             {
-                int off = index - indices[i];
-                if (off > maxOffset) break;
-
-                int len = span.Slice(index - off).CommonPrefixLength(span[index..]);
-                int cost = CopyCostBits(off, len);
-                var score = (double)cost / len; // Score is cost per length
-                if ((matches.Count < MinMatchCandidatesToConsiderWithoutLookingAtTheScore || score < bestScore))
+                bool add = true;
+                if (matches.Count > 0)
                 {
-                    bool add = true;
-                    if (matches.Count > 0)
+                    var previousMatch = matches[^1];
+                    if (!previousMatch.IsRepeat && (off - len) == (previousMatch.Offset - previousMatch.Length))
                     {
-                        var previousMatch = matches[^1];
-                        if (!previousMatch.IsRepeat && (off - len) == (previousMatch.Offset - previousMatch.Length))
-                        {
-                            matches[^1] = new(false, off, len);
-                            add = false;
-                        }
+                        matches[^1] = new(false, off, len);
+                        add = false;
                     }
+                }
 
-                    if (add)
-                    {
-                        matches.Add(new(false, off, len));
-                    }
-                    bestScore = score; // Update best score
+                if (add)
+                {
+                    matches.Add(new(false, off, len));
+                }
+                bestScore = score; // Update best score
 
-                    if (matches.Count > MaxMatchCandidates)
-                    {
-                        break;
-                    }
+                if (matches.Count > MaxMatchCandidates)
+                {
+                    break;
                 }
             }
         }
@@ -209,28 +196,8 @@ public unsafe class Zx0Compressor
 
         var span = new Span<byte>(input, size);
 
-        _mapPrefix2ToPositions.Clear();
-        var ph = input[0];
-        for (int index = 1; index < size; index++)
-        {
-            var c = input[index];
-            var h = (ushort)((c << 8) | ph);
-            if (!_mapPrefix2ToPositions.TryGetValue(h, out var matches))
-            {
-                if (_freeMatchPositionLists.Count > 0)
-                {
-                    matches = _freeMatchPositionLists[^1];
-                    _freeMatchPositionLists.RemoveAt(_freeMatchPositionLists.Count - 1);
-                }
-                else
-                {
-                    matches = new List<int>();
-                }
-                _mapPrefix2ToPositions[h] = matches;
-            }
-            ph = c;
-            matches.Add(index - 1);
-        }
+        // Initialize the prefix map
+        _mapPrefix2ToPositions.Initialize(span);
 
         if (_buckets.Length < size)
         {
@@ -243,9 +210,10 @@ public unsafe class Zx0Compressor
         InsertIntoBucket(previousBucket, LiteralCostBits(1), 0, 1, 1, true, null);
         var bestMatches = _bestMatches;
         var clock = Stopwatch.StartNew();
+        ref var bucketRef = ref MemoryMarshal.GetArrayDataReference(_buckets);
         for (int index = skip + 1; index < size; index++)
         {
-            var nextBucket = GetOrCreateBucket(_buckets, index);
+            var nextBucket = GetOrCreateBucket(ref bucketRef, index);
 
             int highestIndex = index;
             // Go over survivors in the previous bucket
@@ -267,29 +235,33 @@ public unsafe class Zx0Compressor
                 //}
                 //Console.WriteLine();
 
-                foreach (var match in bestMatches)
+                foreach (var match in CollectionsMarshal.AsSpan(bestMatches))
                 {
-                    if (highestIndex == index && match.Length <= MaxForwardParseInserts)
+                    bool isRepeat = match.IsRepeat;
+                    var length = match.Length;
+                    var offset = match.Offset;
+
+                    if (highestIndex == index && length <= MaxForwardParseInserts)
                     {
-                        for (int i = 1; i <= match.Length; i++)
+                        for (int i = 1; i <= length; i++)
                         {
                             //if (index + i >= input_size) break; // Prevent out of bounds access
                             // While a repeat of 1 is possible, a copy of 1 is not, so we skip it
-                            if (!match.IsRepeat && i == 1) continue;
+                            if (!isRepeat && i == 1) continue;
 
                             // Insert match into the current bucket
-                            var cost = match.IsRepeat ? RepeatCostBits(i) : CopyCostBits(match.Offset, i);
-                            InsertIntoBucket(GetOrCreateBucket(_buckets, index + i - 1), cost, index, match.Offset, i, false, block);
+                            var cost = isRepeat ? RepeatCostBits(i) : CopyCostBits(offset, i);
+                            InsertIntoBucket(GetOrCreateBucket(ref bucketRef, index + i - 1), cost, index, offset, i, false, block);
                         }
                     }
                     else
                     {
-                        var endMatchIndex = index + match.Length - 1;
+                        var endMatchIndex = index + length - 1;
 
                         if (endMatchIndex >= highestIndex)
                         {
-                            var cost = match.IsRepeat ? RepeatCostBits(match.Length) : CopyCostBits(match.Offset, match.Length);
-                            InsertIntoBucket(GetOrCreateBucket(_buckets, endMatchIndex), cost, index, match.Offset, match.Length, false, block);
+                            var cost = isRepeat ? RepeatCostBits(length) : CopyCostBits(offset, length);
+                            InsertIntoBucket(GetOrCreateBucket(ref bucketRef, endMatchIndex), cost, index, offset, length, false, block);
                             highestIndex = endMatchIndex; // Update the highest index if this match extends beyond it
                         }
                     }
@@ -314,14 +286,14 @@ public unsafe class Zx0Compressor
             // Release all previous buckets that are no longer needed (including the one that we skipped)
             for (int i = previousIndex; i < highestIndex; i++)
             {
-                var bucket = _buckets[i];
+                ref var bucket = ref Unsafe.Add(ref bucketRef, i);
                 if (bucket is null) continue;
                 ReleaseBucket(bucket);
-                _buckets[i] = null;
+                bucket = null;
             }
             //previousBucket = nextBucket; // Move to the next bucket
 
-            previousBucket = _buckets[highestIndex]!;
+            previousBucket = Unsafe.Add(ref bucketRef, highestIndex);
             Debug.Assert(previousBucket is not null && previousBucket.Count > 0);
             previousIndex = index;
             index = highestIndex; // Move the index to the highest index found in this iteration
@@ -347,9 +319,10 @@ public unsafe class Zx0Compressor
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Bucket GetOrCreateBucket(Bucket?[] buckets, int index)
+    private Bucket GetOrCreateBucket(ref Bucket? bucRef, int index)
     {
-        ref var bucket = ref buckets[index];
+        Debug.Assert(index < _buckets.Length);
+        ref var bucket = ref Unsafe.Add(ref bucRef, index);
         return bucket ??= NewBucketItem();
     }
     
@@ -757,5 +730,75 @@ public unsafe class Zx0Compressor
         public int Offset => (int)((_value >> 32) & 0x7FFF_FFFF);
 
         public override string ToString() => $"{(IsRepeat ? "Repeat" : "Copy")} - Offset: {Offset}, Length: {Length}";
+    }
+
+    private struct PrefixMap()
+    {
+        private readonly ulong[] _mapShortToRange = new ulong[ushort.MaxValue + 1];
+
+        private int[] _positions = [];
+
+        public void Initialize(Span<byte> buffer)
+        {
+            if (_positions.Length < buffer.Length)
+            {
+                _positions = new int[buffer.Length];
+            }
+
+            // Clear previous map
+            var spanRange = _mapShortToRange.AsSpan();
+            spanRange.Clear();
+
+            // Count occurrences of each prefix
+            var ph = buffer[0];
+            ref var map = ref MemoryMarshal.GetReference(spanRange);
+            foreach (var c in buffer[1..])
+            {
+                var prefix = (ushort)((c << 8) | ph);
+                ref var entry = ref Unsafe.Add(ref map, prefix);
+                entry++;
+                ph = c;
+            }
+
+            // Calculate the position of each prefix in the positions array
+            int currentPosition = 0;
+            int indexInSpan = 0;
+            while (spanRange.Length > 0)
+            {
+                // Find the next non-zero entry
+                var i = spanRange.Slice(indexInSpan).IndexOfAnyExcept(0UL);
+                if (i < 0) break;
+
+                // Update the position for this entry
+                ref var entry = ref Unsafe.Add(ref map, indexInSpan + i);
+                var length = (int)(uint)entry;
+                entry = ((ulong)currentPosition << 32); // We clear the length as we will use it as a counter later
+                currentPosition += length;
+                indexInSpan += i + 1;
+            }
+
+            // Fill the positions array with the indices of each prefix
+            ph = buffer[0];
+            ref var posRef = ref MemoryMarshal.GetArrayDataReference(_positions);
+            for (int i = 1; i < buffer.Length; i++)
+            {
+                var c = buffer[i];
+                var prefix = (ushort)((c << 8) | ph);
+                ref var entry = ref Unsafe.Add(ref map, prefix);
+                var pos = (int)(entry >> 32) + (int)(uint)entry; // Get the current position and add the count
+                Unsafe.Add(ref posRef, pos) = i - 1;
+                entry++; // Increment the count
+                ph = c;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Span<int> GetPositions(ushort prefix)
+        {
+            var entry = Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(_mapShortToRange), prefix);
+            var start = (int)(entry >> 32);
+            var length = (int)(uint)entry;
+            return _positions.AsSpan(start, length);
+        }
     }
 }
