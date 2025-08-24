@@ -47,6 +47,7 @@ public unsafe class Zx0Compressor
 
     private Block[] _blockBuffer;
     private int _blockPoolIndex;
+    private readonly Stopwatch _statClock = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Zx0Compressor"/> class.
@@ -58,6 +59,16 @@ public unsafe class Zx0Compressor
         _buckets = [];
         _blockBuffer = GC.AllocateUninitializedArray<Block>(BlockBufferSize, true);
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to collect statistics during compression.
+    /// </summary>
+    public bool EnableStatistics { get; set; }
+
+    /// <summary>
+    /// Gets the statistics of the last compression run.
+    /// </summary>
+    public Zx0Statistics Statistics { get; } = new();
 
     /// <summary>
     /// Compresses the input data using ZX0 algorithm.
@@ -101,6 +112,8 @@ public unsafe class Zx0Compressor
 
         fixed (byte* inputPtr = input)
         {
+            _statClock.Restart();
+
             byte* inputData = inputPtr;
             if (backwardsMode)
             {
@@ -108,15 +121,45 @@ public unsafe class Zx0Compressor
             }
 
             var block = Optimize(inputData, input.Length, skip, offsetLimit);
+            _statClock.Stop();
+            if (EnableStatistics)
+            {
+                Statistics.TimeToOptimize += _statClock.Elapsed;
+                Statistics.InputSize += input.Length;
+            }
 
+            if (EnableStatistics)
+            {
+                // Collect statistics on repeat and copy sizes
+                var blockPtr = block;
+                while (blockPtr is not null)
+                {
+                    if (!blockPtr->IsLiteral)
+                    {
+                        var dict = blockPtr->NextPosition != null && blockPtr->NextPosition->IsLiteral && blockPtr->Offset == blockPtr->NextPosition->Offset ? Statistics.CountPerRepeatSize : Statistics.CountPerCopySize;
+                        ref var length = ref CollectionsMarshal.GetValueRefOrAddDefault(dict, blockPtr->Length, out _);
+                        length++;
+                    }
+                    blockPtr = blockPtr->NextPosition;
+                }
+            }
+
+            _statClock.Restart();
             var compressed = CompressInternal(block, inputData, input.Length, skip, backwardsMode, invertMode, out delta);
-
             FreeAllBuckets();
             FreeBlockBuffers();
 
             if (backwardsMode)
             {
                 compressed.Reverse();
+            }
+            _statClock.Stop();
+
+            if (EnableStatistics)
+            {
+                Statistics.TimeToEncode += _statClock.Elapsed;
+                Statistics.OutputSize += compressed.Length;
+                Statistics.DeltaSize += delta;
             }
 
             return compressed;
@@ -716,6 +759,120 @@ public unsafe class Zx0Compressor
         => 1 /*flag*/ +
            EliasGammaBits((offset - 1) / 128 + 1) + 8 /*LSB*/ +
            EliasGammaBits(len - 1) - 1; // backtrack = true
+
+    /// <summary>
+    /// Holds statistics about a ZX0 compression run, including input/output sizes,
+    /// timing information, and counts of repeat/copy match lengths.
+    /// </summary>
+    public class Zx0Statistics
+    {
+        /// <summary>
+        /// Size of the input data in bytes.
+        /// </summary>
+        public int InputSize;
+
+        /// <summary>
+        /// Size of the compressed output data in bytes.
+        /// </summary>
+        public int OutputSize;
+
+        /// <summary>
+        /// Difference between output and input size (delta).
+        /// </summary>
+        public int DeltaSize;
+
+        /// <summary>
+        /// Time taken to perform the optimization phase.
+        /// </summary>
+        public TimeSpan TimeToOptimize;
+
+        /// <summary>
+        /// Time taken to encode the data.
+        /// </summary>
+        public TimeSpan TimeToEncode;
+
+        /// <summary>
+        /// Counts of repeat match lengths (length → count).
+        /// </summary>
+        public Dictionary<int, int> CountPerRepeatSize { get; } = new();
+
+        /// <summary>
+        /// Counts of copy match lengths (length → count).
+        /// </summary>
+        public Dictionary<int, int> CountPerCopySize { get; } = new();
+
+        /// <summary>
+        /// Clears all statistics, resetting sizes, times, and counts to zero.
+        /// </summary>
+        public void Clear()
+        {
+            InputSize = 0;
+            OutputSize = 0;
+            DeltaSize = 0;
+            TimeToOptimize = TimeSpan.Zero;
+            TimeToEncode = TimeSpan.Zero;
+            CountPerRepeatSize.Clear();
+            CountPerCopySize.Clear();
+        }
+
+        /// <summary>
+        /// Dumps the statistics to the specified <see cref="TextWriter"/> in Markdown format.
+        /// </summary>
+        /// <param name="writer">The writer to output the Markdown table.</param>
+        public void DumpToMarkdown(TextWriter writer)
+        {
+            writer.WriteLine("| Metric | Value |");
+            writer.WriteLine("|--------|-------|");
+            writer.WriteLine($"| Input Size | {InputSize} bytes |");
+            writer.WriteLine($"| Output Size | {OutputSize} bytes |");
+            writer.WriteLine($"| Ratio | {(double)OutputSize/InputSize:P2} |");
+            writer.WriteLine($"| Delta Size | {DeltaSize} bytes |");
+            writer.WriteLine($"| Time to Optimize | {TimeToOptimize.TotalMilliseconds:0.00} ms |");
+            writer.WriteLine($"| Time to Encode | {TimeToEncode.TotalMilliseconds:0.00} ms |");
+            writer.WriteLine();
+            writer.WriteLine("### Repeat Sizes");
+            writer.WriteLine("| Length | Count | Inclusive % | Exclusive % |");
+            writer.WriteLine("|--------|-------|-------------|-------------|");
+            var keys = CountPerRepeatSize.OrderBy(kv => kv.Key).ToList();
+            var totalCount = keys.Select(x => x.Value).Sum();
+            for (var i = 0; i < keys.Count; i++)
+            {
+                var kv = keys[i];
+                var totalCountInclusive = 0;
+                for (int j = i; j < keys.Count; j++)
+                {
+                    totalCountInclusive += keys[j].Value;
+                }
+
+                writer.WriteLine($"| {kv.Key} | {kv.Value} | {(double)totalCountInclusive / totalCount:P2} | {(double)kv.Value / totalCount:P2} |");
+            }
+
+            writer.WriteLine();
+            writer.WriteLine("### Copy Sizes");
+            writer.WriteLine("| Length | Count | Inclusive % | Exclusive % |");
+            writer.WriteLine("|--------|-------|-------------|-------------|");
+            keys = CountPerCopySize.OrderBy(kv => kv.Key).ToList();
+            totalCount = keys.Select(x => x.Value).Sum();
+            for (var i = 0; i < keys.Count; i++)
+            {
+                var kv = keys[i];
+                var totalCountInclusive = 0;
+                for (int j = i; j < keys.Count; j++)
+                {
+                    totalCountInclusive += keys[j].Value;
+                }
+
+                writer.WriteLine($"| {kv.Key} | {kv.Value} | {(double)totalCountInclusive / totalCount:P2} | {(double)kv.Value / totalCount:P2} |");
+            }
+        }
+
+        public override string ToString()
+        {
+            using var sw = new StringWriter();
+            DumpToMarkdown(sw);
+            return sw.ToString();
+        }
+    }
 
     /// <summary>
     /// Represents a bucket of survivor blocks for dynamic programming.
