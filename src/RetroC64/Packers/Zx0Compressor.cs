@@ -11,8 +11,7 @@ namespace RetroC64.Packers;
 
 /// <summary>
 /// Implements the ZX0 compression algorithm.
-/// This class uses a kind of "beam search" algorithm to find near optimal compression paths while staying much faster than exhaustive search.
-/// It supports both forward and backward compression, as well as quick (ZX7) mode.
+/// This class uses a kind of beam search/forward match/flexible algorithm keeping multiple survivor heads to find a near optimal compression path while staying much faster than exhaustive search.
 /// </summary>
 /// <remarks>
 /// This class can be reused for multiple compressions, but it is not thread-safe.
