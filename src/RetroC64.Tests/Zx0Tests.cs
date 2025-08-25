@@ -78,6 +78,13 @@ public class Zx0Tests
     [TestMethod]
     public void TestBenchAllFiles()
     {
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")))
+        {
+            // Skip benchmarks on CI
+            Assert.Inconclusive("Skip benchmarks on CI");
+            return;
+        }
+        
         var clock = Stopwatch.StartNew();
 
         var salvadorExe = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "salvador", "VS2019", "bin", "salvador.exe"));
