@@ -736,10 +736,24 @@ public unsafe class Zx0Compressor
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int EliasGammaBits(int value)
+    internal static int EliasGammaBits(int value)
     {
         Debug.Assert(value > 0);
         return (32 - BitOperations.LeadingZeroCount((uint)value) - 1) * 2 + 1;
+    }
+
+    // Only used for the tests
+    internal static int EliasGammaBitsSlow(int value)
+    {
+        int i;
+        for (i = 2; i <= value; i <<= 1) ;
+        i >>= 1;
+        int bits = 1; // final 1
+        while ((i >>= 1) != 0)
+        {
+            bits += 2;
+        }
+        return bits;
     }
 
     // Cost for 1 literal of length L
