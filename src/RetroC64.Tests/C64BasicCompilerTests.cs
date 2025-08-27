@@ -28,4 +28,55 @@ public class C64BasicCompilerTests
 
         Assert.AreEqual(src, generated, "Test Basic Program don't match!");
     }
+
+    [TestMethod]
+    public async Task TestWithNoSpaces()
+    {
+        var program = "10PRINT\"HELLO\"\n20GOTO10\n";
+        var compiler = new C64BasicCompiler();
+        compiler.Compile(program);
+
+        var decompile = C64BasicDecompiler.Decompile(compiler.Buffer);
+
+        var normalized = decompile.SourceCode.ReplaceLineEndings("\n").Trim();
+
+        var expecting = """
+                        10 PRINT"HELLO"
+                        20 GOTO10
+                        """.ReplaceLineEndings("\n").Trim();
+        Assert.AreEqual(expecting, normalized);
+
+
+        if (OperatingSystem.IsWindows())
+        {
+            var expectedCompile = await RunPetCat(program);
+            CollectionAssert.AreEqual(expectedCompile, compiler.Buffer.ToArray());
+        }
+    }
+
+    private static async Task<byte[]> RunPetCat(string program)
+    {
+        var c1541ExePath = ViceDownloader.InitializeAndGetExePath("petcat");
+        if (!File.Exists(c1541ExePath))
+        {
+            throw new FileNotFoundException($"C1541 executable not found at {c1541ExePath}");
+        }
+
+        var stdOutAndErrorBuffer = new StringBuilder();
+
+        var memoryStream = new MemoryStream();
+        var cli = new CliWrap.Command(c1541ExePath)
+            .WithValidation(CommandResultValidation.None)
+            .WithArguments(["-w2"])
+            .WithStandardInputPipe(PipeSource.FromString(program.ToLowerInvariant()))
+            .WithStandardOutputPipe(PipeTarget.ToStream(memoryStream))
+            .WithStandardErrorPipe(PipeTarget.ToStringBuilder(stdOutAndErrorBuffer))
+            .WithWorkingDirectory(AppContext.BaseDirectory);
+
+        var result = await cli.ExecuteAsync();
+
+        Assert.AreEqual(0, result.ExitCode, $"petcat command failed with exit code {result.ExitCode}: {stdOutAndErrorBuffer}");
+
+        return memoryStream.ToArray();
+    }
 }

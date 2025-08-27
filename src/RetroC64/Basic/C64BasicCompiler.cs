@@ -87,14 +87,19 @@ public class C64BasicCompiler : IDisposable
         // Reserve space for next line pointer (will be filled later)
         WriteUShort(0);
 
-        // Parse line number
-        var spaceIndex = line.IndexOf(' ');
-        if (spaceIndex == -1)
+        // The line number can be followed by an instruction without having a whitespace
+        int length = 0;
+        while (length < line.Length && char.IsAsciiDigit(line[length]))
         {
-            throw new ArgumentException($"Invalid line format: {line}");
+            length++;
         }
 
-        var lineNumberStr = line.Slice(0, spaceIndex);
+        if (length == 0)
+        {
+            throw new ArgumentException($"Invalid line format: {line}. Expecting a line number at the beginning");
+        }
+
+        var lineNumberStr = line.Slice(0, length);
         if (!ushort.TryParse(lineNumberStr, out var lineNumber))
         {
             throw new ArgumentException($"Invalid line number: {lineNumberStr}");
@@ -104,7 +109,7 @@ public class C64BasicCompiler : IDisposable
         WriteUShort(lineNumber);
 
         // Tokenize and write the rest of the line
-        var statement = line.Slice(spaceIndex + 1);
+        var statement = line.Slice(length);
         TokenizeLine(statement);
 
         // Write line terminator
@@ -159,7 +164,7 @@ public class C64BasicCompiler : IDisposable
             {
                 // Handle keyword or variable
                 var wordStart = i;
-                while (i < statement.Length && char.IsAsciiLetterOrDigit(statement[i]))
+                while (i < statement.Length && char.IsAsciiLetter(statement[i]))
                 {
                     i++;
                 }
