@@ -325,7 +325,7 @@ public class Disk64Tests
     
     private static async Task<string> RunC1541(params string[] commands)
     {
-        var c1541ExePath = Path.GetFullPath(Path.Combine(ViceDownloader.Initialize(), "bin", "c1541.exe"));
+        var c1541ExePath = ViceDownloader.InitializeAndGetExePath("c1541");
         if (!File.Exists(c1541ExePath))
         {
             throw new FileNotFoundException($"C1541 executable not found at {c1541ExePath}");

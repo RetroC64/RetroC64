@@ -32,6 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\RetroC64.Vice\RetroC64.Vice.csproj" />
     <ProjectReference Include="..\RetroC64\RetroC64.csproj" />
   </ItemGroup>
 

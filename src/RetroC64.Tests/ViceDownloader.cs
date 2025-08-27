@@ -10,6 +10,17 @@ internal class ViceDownloader
     private const string ViceZip = "https://github.com/VICE-Team/svn-mirror/releases/download/3.9.0/GTK3VICE-3.9-win64.zip";
     private const string ViceFolder = "GTK3VICE-3.9-win64";
 
+    public static string InitializeAndGetExePath(string exeName)
+    {
+        var vicePath = Initialize();
+        var exePath = Path.GetFullPath(Path.Combine(vicePath, "bin", OperatingSystem.IsWindows() ? $"{exeName}.exe" : exeName));
+        if (!File.Exists(exePath))
+        {
+            throw new InvalidOperationException($"VICE executable not found: {exePath}");
+        }
+        return exePath;
+    }
+
     public static string Initialize()
     {
         var sharedPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", ".."));
