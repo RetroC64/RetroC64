@@ -253,8 +253,11 @@ public class C64BasicCompiler : IDisposable
 
     private void WriteChar(char c)
     {
-        WriteByte(C64BasicHelper.CharToPETSCII((c)));
+        WriteByte(CharToPetsciiBasic((c)));
     }
+
+    // Undefined character in PETSCII, replace with 0xFF
+    private static byte CharToPetsciiBasic(char c) => c < 0x80 ? C64Petscii.ToByte(c) : (byte)0xFF;
 
     private void WriteUShort(ushort value)
     {

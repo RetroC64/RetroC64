@@ -13,29 +13,6 @@ internal static class C64BasicHelper
     private static readonly FrozenDictionary<string, C64BasicToken>.AlternateLookup<ReadOnlySpan<char>> TokenMapAlternate = TokenMap.GetAlternateLookup<ReadOnlySpan<char>>();
     private static readonly string?[] MapTokenToString = CreateReverse(TokenMap);
 
-    // TODO: handle shifted
-    public static byte CharToPETSCII(char ch)
-    {
-
-        if (ch < 0x80 && UnicodeToPETSCII.TryGetValue(ch, out var petAscii))
-        {
-            return petAscii;
-        }
-        // If character is not in PETSCII range, return 0xFF (invalid)
-        return 0xFF;
-    }
-
-    public static char PETSCIIToChar(byte b)
-    {
-        if (b < PETSCIIToUnicode.Length)
-        {
-            return PETSCIIToUnicode[b];
-        }
-
-        // If byte is not in PETSCII range, return replacement character
-        return '\uFFFD'; // Unicode replacement character
-    }
-
     public static bool TryGetToken(ReadOnlySpan<char> token, out C64BasicToken basicToken)
     {
         return TokenMapAlternate.TryGetValue(token, out basicToken);
@@ -83,21 +60,6 @@ internal static class C64BasicHelper
         '\uFFFD', '\u2502', '\u03C0', '\u25E5' // 0x7C - 0x7F
     };
 
-    private static readonly FrozenDictionary<char, byte> UnicodeToPETSCII = CreateUnicodeToPETSCIIMap();
-
-    private static FrozenDictionary<char, byte> CreateUnicodeToPETSCIIMap()
-    {
-        var map = new Dictionary<char, byte>(PETSCIIToUnicode.Length);
-        for (byte i = 0; i < PETSCIIToUnicode.Length; i++)
-        {
-            var ch = PETSCIIToUnicode[i];
-            if (ch != '\uFFFD') // Exclude replacement character
-            {
-                map[ch] = i;
-            }
-        }
-        return map.ToFrozenDictionary();
-    }
     
     private static FrozenDictionary<string, C64BasicToken> CreateTokenMap()
     {
