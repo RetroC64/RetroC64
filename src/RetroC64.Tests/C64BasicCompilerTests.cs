@@ -2,7 +2,9 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using CliWrap;
 using RetroC64.Basic;
+using System.Text;
 
 namespace RetroC64.Tests;
 
@@ -10,18 +12,19 @@ namespace RetroC64.Tests;
 public class C64BasicCompilerTests
 {
     [TestMethod]
-    public void TestSimple()
+    public async Task TestSimple()
     {
-        var basic = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Simple.bas"));
-        var verified = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Simple.prg"));
+        var basic = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Simple.bas")).ReplaceLineEndings("\n");
+        var verified = await RunPetCat(basic);
+        File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "Simple_verified.prg"), verified);
 
         var basicCompiler = new C64BasicCompiler();
         basicCompiler.Compile(basic);
 
         var program = C64BasicDecompiler.Decompile(basicCompiler.Buffer);
 
-        CollectionAssert.AreEqual(verified, basicCompiler.Buffer.ToArray(), "PRG compiled program don't match!");
         File.WriteAllBytes("Simple_generated.prg", basicCompiler.Buffer);
+        CollectionAssert.AreEqual(verified, basicCompiler.Buffer.ToArray(), "PRG compiled program don't match!");
 
         var src = basic.ReplaceLineEndings("\n").Trim();
         var generated = program.SourceCode.ReplaceLineEndings("\n").Trim();

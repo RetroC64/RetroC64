@@ -110,6 +110,7 @@ public class C64BasicCompiler : IDisposable
 
         // Tokenize and write the rest of the line
         var statement = line.Slice(length);
+        statement = statement.TrimStart(' '); // Remove all spaces after the line number
         TokenizeLine(statement);
 
         // Write line terminator

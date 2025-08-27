@@ -9,15 +9,11 @@
 
   <ItemGroup>
     <None Remove="Simple.bas" />
-    <None Remove="Simple.prg" />
     <None Remove="zx0_test_files\*" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="Simple.bas">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Simple.prg">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="zx0_test_files\*">
