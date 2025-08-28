@@ -89,16 +89,23 @@ public class ViceMonitorTests
             Console.WriteLine(response);
         }
 
+        // MemorySetCommand
+        {
+            var setResponse = await runner.Monitor.SendCommandAsync(new MemorySetCommand() { StartAddress = 0xC000, BankId = new BankId(0), Memspace = MemSpace.MainMemory, Data = new byte[] { 0x34, 0x12 } });
+            Assert.IsTrue(setResponse is GenericResponse);
+            Console.WriteLine(setResponse);
+        }
+
         // MemoryGetCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new MemoryGetCommand() { StartAddress = 0xFFFE, EndAddress = 0xFFFF, BankId = new BankId(0), Memspace = MemSpace.MainMemory});
+            var response = await runner.Monitor.SendCommandAsync(new MemoryGetCommand() { StartAddress = 0xC000, EndAddress = 0xC001, BankId = new BankId(0), Memspace = MemSpace.MainMemory});
             Assert.IsTrue(response is GenericResponse);
             var memoryResponse = (GenericResponse)response;
             Assert.AreEqual(4, memoryResponse.Body.Length, "Memory length mismatch ");
 
             var span = MemoryMarshal.Cast<byte, ushort>(memoryResponse.Body.AsSpan());
             Assert.AreEqual(2, span[0], "Must be length of 2");
-            Assert.AreEqual(0xFF48, span[1], "IRQ address mismatch");
+            Assert.AreEqual(0x1234, span[1], "Read memory mismatch");
             
             Console.WriteLine(response);
         }

@@ -26,7 +26,7 @@ public class MemorySetCommand() : MonitorCommand(MonitorCommandType.MemorySet)
     /// <summary>
     /// Gets or sets the end address.
     /// </summary>
-    public ushort EndAddress => (ushort)(StartAddress + Data.Length);
+    public ushort EndAddress => (ushort)(StartAddress + Data.Length - 1);
 
     /// <summary>
     /// Gets or sets the memory space.
