@@ -19,12 +19,12 @@ public class C64BasicCompilerTests
         File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "Simple_verified.prg"), verified);
 
         var basicCompiler = new C64BasicCompiler();
-        basicCompiler.Compile(basic);
+        var basicBuffer = basicCompiler.Compile(basic);
 
-        var program = C64BasicDecompiler.Decompile(basicCompiler.Buffer);
+        var program = C64BasicDecompiler.Decompile(basicBuffer);
 
-        File.WriteAllBytes("Simple_generated.prg", basicCompiler.Buffer);
-        CollectionAssert.AreEqual(verified, basicCompiler.Buffer.ToArray(), "PRG compiled program don't match!");
+        File.WriteAllBytes("Simple_generated.prg", basicBuffer);
+        CollectionAssert.AreEqual(verified, basicBuffer.ToArray(), "PRG compiled program don't match!");
 
         var src = basic.ReplaceLineEndings("\n").Trim();
         var generated = program.SourceCode.ReplaceLineEndings("\n").Trim();
@@ -37,9 +37,9 @@ public class C64BasicCompilerTests
     {
         var program = "10PRINT\"HELLO\"\n20GOTO10\n";
         var compiler = new C64BasicCompiler();
-        compiler.Compile(program);
+        var basicBuffer = compiler.Compile(program).ToArray();
 
-        var decompile = C64BasicDecompiler.Decompile(compiler.Buffer);
+        var decompile = C64BasicDecompiler.Decompile(basicBuffer);
 
         var normalized = decompile.SourceCode.ReplaceLineEndings("\n").Trim();
 
@@ -53,7 +53,7 @@ public class C64BasicCompilerTests
         if (OperatingSystem.IsWindows())
         {
             var expectedCompile = await RunPetCat(program);
-            CollectionAssert.AreEqual(expectedCompile, compiler.Buffer.ToArray());
+            CollectionAssert.AreEqual(expectedCompile, basicBuffer.ToArray());
         }
     }
 

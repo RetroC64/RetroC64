@@ -33,11 +33,6 @@ public class C64BasicCompiler : IDisposable
     public ushort CurrentOffset => _internalOffset <= 1 ? (ushort)0 : (ushort)(_internalOffset - 2);
 
     /// <summary>
-    /// Gets a span representing the compiled binary buffer.
-    /// </summary>
-    public Span<byte> Buffer => new(_buffer, 0, _internalOffset);
-
-    /// <summary>
     /// Releases resources used by the compiler.
     /// </summary>
     public void Dispose()
@@ -58,7 +53,11 @@ public class C64BasicCompiler : IDisposable
     /// Compiles a C64 BASIC program from its source string representation.
     /// </summary>
     /// <param name="basicProgram">The BASIC program as a string.</param>
-    public void Compile(string basicProgram)
+    /// <returns>The compiled program in a temporary buffer.</returns>
+    /// <remarks>
+    /// The returned buffer is reused after each compile. 
+    /// </remarks>
+    public ReadOnlySpan<byte> Compile(string basicProgram)
     {
         _internalOffset = 0;
 
@@ -78,6 +77,8 @@ public class C64BasicCompiler : IDisposable
 
         // Write program terminator (two zero bytes)
         WriteUShort(0);
+
+        return new(_buffer, 0, _internalOffset);
     }
 
     private void CompileLine(ReadOnlySpan<char> line)
