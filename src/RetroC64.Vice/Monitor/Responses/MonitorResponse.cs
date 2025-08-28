@@ -3,7 +3,6 @@
 // See license.txt file in the project root for full license information.
 
 using System.Text;
-using RetroC64.Vice.Monitor.Shared;
 
 namespace RetroC64.Vice.Monitor.Responses;
 

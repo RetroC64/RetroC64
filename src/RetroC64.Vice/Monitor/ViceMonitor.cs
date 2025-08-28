@@ -4,7 +4,6 @@
 
 using RetroC64.Vice.Monitor.Commands;
 using RetroC64.Vice.Monitor.Responses;
-using RetroC64.Vice.Monitor.Shared;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;

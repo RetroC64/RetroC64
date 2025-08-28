@@ -5,7 +5,6 @@
 using System.Buffers.Binary;
 using System.Text;
 using RetroC64.Vice.Monitor.Commands;
-using RetroC64.Vice.Monitor.Shared;
 
 namespace RetroC64.Vice.Monitor.Responses;
 
