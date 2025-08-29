@@ -2,6 +2,7 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace RetroC64.Packers;
@@ -33,8 +34,9 @@ public class Zx0Decompressor
     /// Decompresses ZX0 compressed data.
     /// </summary>
     /// <param name="input">Compressed data</param>
+    /// <param name="enableEliasLittleEndian">Encode Elias gamma values in little-endian mode. Default is big-endian.</param>
     /// <returns>Decompressed data as a <see cref="Span{byte}"/></returns>
-    public Span<byte> Decompress(ReadOnlySpan<byte> input)
+    public Span<byte> Decompress(ReadOnlySpan<byte> input, bool enableEliasLittleEndian = false)
     {
         if (_output.Length < input.Length * 4)
         {
@@ -52,7 +54,7 @@ public class Zx0Decompressor
 
         // Main decompression loop using ZX0 format control flow.
     CopyLiterals:
-        int length = ReadInterlacedEliasGamma(input, false);
+        int length = ReadInterlacedEliasGamma(input, false, enableEliasLittleEndian);
         for (int i = 0; i < length; i++)
             WriteByte(ReadByte(input));
         if (ReadBit(input) != 0)
@@ -60,7 +62,7 @@ public class Zx0Decompressor
             goto CopyFromNewOffset;
         }
 
-        length = ReadInterlacedEliasGamma(input, false);
+        length = ReadInterlacedEliasGamma(input, false, enableEliasLittleEndian);
         WriteBytes(lastOffset, length);
         if (ReadBit(input) == 0)
         {
@@ -70,15 +72,23 @@ public class Zx0Decompressor
         // ReSharper disable once BadChildStatementIndent
     CopyFromNewOffset:
 
-        lastOffset = ReadInterlacedEliasGamma(input, true);
+        lastOffset = ReadInterlacedEliasGamma(input, !enableEliasLittleEndian, enableEliasLittleEndian);
         if (lastOffset == 256)
         {
             return new Span<byte>(_output, 0, _outputIndex);
         }
 
-        lastOffset = lastOffset * 128 - (ReadByte(input) >> 1);
+        if (enableEliasLittleEndian)
+        {
+            lastOffset = (((lastOffset - 1)  << 7) + (ReadByte(input) >> 1)) + 1;
+        }
+        else
+        {
+            lastOffset = lastOffset * 128 - (ReadByte(input) >> 1);
+        }
+        
         _backtrack = true;
-        length = ReadInterlacedEliasGamma(input, false) + 1;
+        length = ReadInterlacedEliasGamma(input, false, enableEliasLittleEndian) + 1;
 
         WriteBytes(lastOffset, length);
 
@@ -127,16 +137,43 @@ public class Zx0Decompressor
     /// </summary>
     /// <param name="input">Input buffer</param>
     /// <param name="inverted">Indicates if the Elias gamma encoding is inverted</param>
+    /// <param name="enableEliasLittleEndian">Encode Elias gamma values in little-endian mode. Default is big-endian.</param>
     /// <returns>The decoded integer value</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int ReadInterlacedEliasGamma(ReadOnlySpan<byte> input, bool inverted)
+    private int ReadInterlacedEliasGamma(ReadOnlySpan<byte> input, bool inverted, bool enableEliasLittleEndian)
     {
-        int value = 1;
-        while (ReadBit(input) == 0)
+        if (enableEliasLittleEndian)
         {
-            value = (value << 1) | (ReadBit(input) ^ (inverted ? 1 : 0));
+            Debug.Assert(!inverted);
+            int lo = 1;
+            while (ReadBit(input) == 0)
+            {
+                lo = (lo << 1) | ReadBit(input);
+                if (lo >= 0x100)
+                {
+                    int high = 1;
+                    lo &= 0xFF;
+                    while (ReadBit(input) == 0)
+                    {
+                        high = (high << 1) | ReadBit(input);
+                    }
+
+                    return (high << 8) | lo;
+                }
+            }
+
+            return lo;
         }
-        return value;
+        else
+        {
+            int value = 1;
+            while (ReadBit(input) == 0)
+            {
+                value = (value << 1) | (ReadBit(input) ^ (inverted ? 1 : 0));
+            }
+
+            return value;
+        }
     }
 
     /// <summary>

@@ -77,13 +77,14 @@ public unsafe class Zx0Compressor
     /// <param name="backwardsMode">Compress backwards</param>
     /// <param name="invertMode">Invert mode</param>
     /// <param name="quickMode">Use quick (ZX7) mode</param>
+    /// <param name="enableEliasLittleEndian">Encode Elias gamma values in little-endian mode. Default is big-endian.</param>
     /// <returns>Compressed data</returns>
     /// <remarks>
     /// The return buffer is valid until the next call to <see cref="Compress(byte[], int, bool, bool, bool)"/>.
     /// </remarks>
-    public Span<byte> Compress(byte[] input, int skip = 0, bool backwardsMode = false, bool invertMode = true, bool quickMode = false)
+    public Span<byte> Compress(byte[] input, int skip = 0, bool backwardsMode = false, bool invertMode = true, bool quickMode = false, bool enableEliasLittleEndian = false)
     {
-        return Compress(input, out _, skip, backwardsMode, invertMode, quickMode);
+        return Compress(input, out _, skip, backwardsMode, invertMode, quickMode, enableEliasLittleEndian);
     }
 
     /// <summary>
@@ -95,11 +96,12 @@ public unsafe class Zx0Compressor
     /// <param name="backwardsMode">Compress backwards</param>
     /// <param name="invertMode">Invert mode</param>
     /// <param name="quickMode">Use quick (ZX7) mode</param>
+    /// <param name="enableEliasLittleEndian">Encode Elias gamma values in little-endian mode. Default is big-endian.</param>
     /// <returns>Compressed data</returns>
     /// <remarks>
     /// The return buffer is valid until the next call to <see cref="Compress(byte[], int, bool, bool, bool)"/>.
     /// </remarks>
-    public Span<byte> Compress(byte[] input, out int delta, int skip = 0, bool backwardsMode = false, bool invertMode = true, bool quickMode = false)
+    public Span<byte> Compress(byte[] input, out int delta, int skip = 0, bool backwardsMode = false, bool invertMode = true, bool quickMode = false, bool enableEliasLittleEndian = false)
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
 
@@ -144,7 +146,7 @@ public unsafe class Zx0Compressor
             }
 
             _statClock.Restart();
-            var compressed = CompressInternal(block, inputData, input.Length, skip, backwardsMode, invertMode, out delta);
+            var compressed = CompressInternal(block, inputData, input.Length, skip, backwardsMode, invertMode, enableEliasLittleEndian, out delta);
             FreeAllBuckets();
             FreeBlockBuffers();
 
@@ -187,7 +189,7 @@ public unsafe class Zx0Compressor
         var matches = _bestMatches;
         matches.Clear();
         // Can repeat only after a literal
-        if (previousIsLiteral && lastOffset > 0 && index > lastOffset)
+        if (previousIsLiteral && lastOffset > 0 && index >= lastOffset)
         {
             int repeatLen = span.Slice(index - lastOffset).CommonPrefixLength(span[index..]);
             if (repeatLen > 0)
@@ -280,7 +282,7 @@ public unsafe class Zx0Compressor
         _buckets[0] = NewBucketItem(); // Initialize the first bucket
         var previousBucket = _buckets[0]!;
         var previousIndex = 0;
-        InsertIntoBucket(previousBucket, LiteralCostBits(1), 0, 1, 1, true, null);
+        InsertIntoBucket(previousBucket, LiteralCostBits(1) - 1, 0, 1, 1, true, null);
         var bestMatches = _bestMatches;
         ref var bucketRef = ref MemoryMarshal.GetArrayDataReference(_buckets);
         for (int index = skip + 1; index < size; index++)
@@ -403,10 +405,18 @@ public unsafe class Zx0Compressor
             if (nextPosition is not null && nextPosition->IsLiteral)
             {
                 encodedBits = LiteralCostBits(nextPosition->Length + length) + (nextPosition->NextPosition is not null ? nextPosition->NextPosition->EncodedBits : 0); // Add the encoded bits of the next position if it exists
+                if (nextPosition->NextPosition is not null && nextPosition->NextPosition->Index == 0)
+                {
+                    encodedBits--; // First literal does not need the initial flag bit
+                }
             }
             else
             {
                 encodedBits = LiteralCostBits(length) + (nextPosition is not null ? nextPosition->EncodedBits : 0); // Add the cost of the literal
+                if (index == 0)
+                {
+                    encodedBits--; // First literal does not need the initial flag bit
+                }
             }
         }
         else
@@ -563,8 +573,9 @@ public unsafe class Zx0Compressor
     /// <summary>
     /// Encodes the block chain into the output buffer.
     /// </summary>
-    private Span<byte> CompressInternal(Block* head, byte* input, int inputSize, int skip, bool backwardsMode, bool invertMode, out int delta)
+    private Span<byte> CompressInternal(Block* head, byte* input, int inputSize, int skip, bool backwardsMode, bool invertMode, bool enableEliasLittleEndian, out int delta)
     {
+        // End marker length in bits -> 25 = 1 bit end marker + 17 bits of elias gamma of 256 + 7 bits for upper byte band
         var outputSize = (head->EncodedBits + 25) / 8;
 
         // Reverse the linked list of blocks to get them in the correct order
@@ -593,6 +604,11 @@ public unsafe class Zx0Compressor
 
         Block* block = head;
 
+        if (enableEliasLittleEndian)
+        {
+            invertMode = false;
+        }
+
         while (block is not null)
         {
             int length = block->Length;
@@ -601,7 +617,7 @@ public unsafe class Zx0Compressor
                 // copy literals indicator
                 WriteBit(0);
                 // copy literals length
-                WriteInterlacedEliasGamma(length, backwardsMode, false);
+                WriteInterlacedEliasGamma(length, backwardsMode, false, enableEliasLittleEndian);
                 // copy literals values
                 for (int i = 0; i < length; i++)
                 {
@@ -614,7 +630,7 @@ public unsafe class Zx0Compressor
                 // copy from last offset indicator
                 WriteBit(0);
                 // copy from last offset length
-                WriteInterlacedEliasGamma(length, backwardsMode, false);
+                WriteInterlacedEliasGamma(length, backwardsMode, false, enableEliasLittleEndian);
                 ReadBytes(length, ref delta);
             }
             else
@@ -622,20 +638,23 @@ public unsafe class Zx0Compressor
                 // copy from new offset indicator
                 WriteBit(1);
                 // copy from new offset MSB
-                WriteInterlacedEliasGamma((block->Offset - 1) / 128 + 1, backwardsMode, invertMode);
+                WriteInterlacedEliasGamma((block->Offset - 1) / 128 + 1, backwardsMode, invertMode, enableEliasLittleEndian);
                 // copy from new offset LSB
-                if (backwardsMode)
-                    WriteByte(((block->Offset - 1) % 128) << 1);
+                if (backwardsMode || enableEliasLittleEndian)
+                    WriteByte(((block->Offset - 1) & 0x7F) << 1);
                 else
-                    WriteByte((127 - (block->Offset - 1) % 128) << 1);
+                    WriteByte((0x7F - (block->Offset - 1) & 0x7F) << 1);
 
                 // copy from new offset length
                 _backtrack = true;
-                WriteInterlacedEliasGamma(length - 1, backwardsMode, false);
+                WriteInterlacedEliasGamma(length - 1, backwardsMode, false, enableEliasLittleEndian);
                 ReadBytes(length, ref delta);
 
                 lastOffset = block->Offset;
             }
+
+            //Console.WriteLine($"Literal: {block->IsLiteral} EncodedBits: {block->EncodedBits} Length: {block->Length} Round: {(block->EncodedBits + 7) / 8}, Position: {_outputIndex}");
+            Debug.Assert((block->EncodedBits + 7) / 8 == _outputIndex);
 
             previousBlock = block;
             var nextBlock = block->NextPosition;
@@ -645,7 +664,7 @@ public unsafe class Zx0Compressor
         }
         // end marker
         WriteBit(1);
-        WriteInterlacedEliasGamma(256, backwardsMode, invertMode);
+        WriteInterlacedEliasGamma(256, backwardsMode, invertMode, enableEliasLittleEndian);
 
         Debug.Assert(outputSize >= _outputIndex);
         return new Span<byte>(_output, 0, _outputIndex);
@@ -712,18 +731,28 @@ public unsafe class Zx0Compressor
         }
     }
 
+
     /// <summary>
     /// Writes an interlaced Elias gamma encoded value to the output buffer.
     /// </summary>
-    private void WriteInterlacedEliasGamma(int value, bool backwardsMode, bool invertMode)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void WriteInterlacedEliasGamma(int value, bool backwardsMode, bool invertMode, bool enableEliasLittleEndian)
     {
-        int i;
-        for (i = 2; i <= value; i <<= 1) ;
-        i >>= 1;
-        while ((i >>= 1) != 0)
+        var bitIndex = GetHighestBitIndex(value);
+        int bitMask = 1 << bitIndex;
+        if (enableEliasLittleEndian && bitIndex >= 8)
+        {
+            // Reverse value LSB / MSB and clear highest bit
+            value &= ~bitMask;
+            int lo = value & 0xFF;
+            int hi = (value >> 8);
+            value = (lo << (bitIndex - 8)) | hi;
+        }
+
+        while ((bitMask >>= 1) != 0)
         {
             WriteBit(backwardsMode ? 1 : 0);
-            WriteBit(invertMode ? ((value & i) == 0 ? 1 : 0) : ((value & i) != 0 ? 1 : 0));
+            WriteBit(invertMode ? ((value & bitMask) == 0 ? 1 : 0) : ((value & bitMask) != 0 ? 1 : 0));
         }
         WriteBit(!backwardsMode ? 1 : 0);
     }
@@ -740,6 +769,14 @@ public unsafe class Zx0Compressor
     {
         Debug.Assert(value > 0);
         return (32 - BitOperations.LeadingZeroCount((uint)value) - 1) * 2 + 1;
+    }
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetHighestBitIndex(int value)
+    {
+        Debug.Assert(value > 0);
+        return (32 - BitOperations.LeadingZeroCount((uint)value) - 1);
     }
 
     // Only used for the tests
@@ -770,8 +807,8 @@ public unsafe class Zx0Compressor
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CopyCostBits(int offset, int len)     // len ≥2
         => 1 /*flag*/ +
-           EliasGammaBits((offset - 1) / 128 + 1) + 8 /*LSB*/ +
-           EliasGammaBits(len - 1) - 1; // backtrack = true
+           EliasGammaBits((offset - 1) / 128 + 1) + 7 /*LSB*/ +
+           EliasGammaBits(len - 1); // backtrack = true
 
     /// <summary>
     /// Holds statistics about a ZX0 compression run, including input/output sizes,

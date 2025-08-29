@@ -22,10 +22,27 @@ public class Zx0Tests
     }
 
     [TestMethod]
+    public void TestEncodingAliasLittleEndian()
+    {
+        var zx0Compressor = new Zx0Compressor();
+        // Force a copy
+        var b16 = Enumerable.Range(0, 16).Select(x => (byte)x).ToArray();
+        var b256Reversed = Enumerable.Range(0, 256).Select(x => (byte)(255 - x)).ToArray();
+
+        byte[] data = [.. b16, .. b16, .. b256Reversed, .. b256Reversed];
+        var compressed = zx0Compressor.Compress(data, enableEliasLittleEndian: true);
+        Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
+
+        var zx0Decompressor = new Zx0Decompressor();
+        var decompressed = zx0Decompressor.Decompress(compressed, enableEliasLittleEndian: true);
+        CollectionAssert.AreEqual(data, decompressed.ToArray()); // Ensure decompression matches original data
+    }
+
+    [TestMethod]
     public void TestBasic()
     {
         var zx0Compressor = new Zx0Compressor();
-        byte[] data = [..Enumerable.Repeat((byte)0, 10), .. Enumerable.Repeat((byte)0, 11)];
+        byte[] data = [..Enumerable.Repeat((byte)0, 21)];
         var compressed = zx0Compressor.Compress(data);
         Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
 
