@@ -34,9 +34,9 @@ public class Zx0Decompressor
     /// Decompresses ZX0 compressed data.
     /// </summary>
     /// <param name="input">Compressed data</param>
-    /// <param name="enableEliasLittleEndian">Encode Elias gamma values in little-endian mode. Default is big-endian.</param>
+    /// <param name="flags">The compression flags. Default is <see cref="Zx0CompressionFlags.None"/>.</param>
     /// <returns>Decompressed data as a <see cref="Span{byte}"/></returns>
-    public Span<byte> Decompress(ReadOnlySpan<byte> input, bool enableEliasLittleEndian = false)
+    public Span<byte> Decompress(ReadOnlySpan<byte> input, Zx0CompressionFlags flags = Zx0CompressionFlags.None)
     {
         if (_output.Length < input.Length * 4)
         {
@@ -52,9 +52,15 @@ public class Zx0Decompressor
 
         int lastOffset = 1;
 
-        // Main decompression loop using ZX0 format control flow.
+        if ((flags & Zx0CompressionFlags.BitFire) != 0)
+        {
+            flags |= Zx0CompressionFlags.NoInvert;
+        }
+        var flagsWithNoInverted = flags | Zx0CompressionFlags.NoInvert;
+
+    // Main decompression loop using ZX0 format control flow.
     CopyLiterals:
-        int length = ReadInterlacedEliasGamma(input, false, enableEliasLittleEndian);
+        int length = ReadInterlacedEliasGamma(input, flagsWithNoInverted);
         for (int i = 0; i < length; i++)
             WriteByte(ReadByte(input));
         if (ReadBit(input) != 0)
@@ -62,7 +68,7 @@ public class Zx0Decompressor
             goto CopyFromNewOffset;
         }
 
-        length = ReadInterlacedEliasGamma(input, false, enableEliasLittleEndian);
+        length = ReadInterlacedEliasGamma(input, flagsWithNoInverted);
         WriteBytes(lastOffset, length);
         if (ReadBit(input) == 0)
         {
@@ -72,13 +78,13 @@ public class Zx0Decompressor
         // ReSharper disable once BadChildStatementIndent
     CopyFromNewOffset:
 
-        lastOffset = ReadInterlacedEliasGamma(input, !enableEliasLittleEndian, enableEliasLittleEndian);
+        lastOffset = ReadInterlacedEliasGamma(input, flags);
         if (lastOffset == 256)
         {
             return new Span<byte>(_output, 0, _outputIndex);
         }
 
-        if (enableEliasLittleEndian)
+        if ((flags & Zx0CompressionFlags.BitFire) != 0)
         {
             lastOffset = (((lastOffset - 1)  << 7) + (ReadByte(input) >> 1)) + 1;
         }
@@ -88,7 +94,7 @@ public class Zx0Decompressor
         }
         
         _backtrack = true;
-        length = ReadInterlacedEliasGamma(input, false, enableEliasLittleEndian) + 1;
+        length = ReadInterlacedEliasGamma(input, flagsWithNoInverted) + 1;
 
         WriteBytes(lastOffset, length);
 
@@ -136,15 +142,13 @@ public class Zx0Decompressor
     /// Used for decoding lengths and offsets in ZX0 format.
     /// </summary>
     /// <param name="input">Input buffer</param>
-    /// <param name="inverted">Indicates if the Elias gamma encoding is inverted</param>
-    /// <param name="enableEliasLittleEndian">Encode Elias gamma values in little-endian mode. Default is big-endian.</param>
+    /// <param name="flags">The compression flags</param>
     /// <returns>The decoded integer value</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int ReadInterlacedEliasGamma(ReadOnlySpan<byte> input, bool inverted, bool enableEliasLittleEndian)
+    private int ReadInterlacedEliasGamma(ReadOnlySpan<byte> input, Zx0CompressionFlags flags)
     {
-        if (enableEliasLittleEndian)
+        if ((flags & Zx0CompressionFlags.BitFire) != 0)
         {
-            Debug.Assert(!inverted);
             int lo = 1;
             while (ReadBit(input) == 0)
             {
@@ -167,9 +171,10 @@ public class Zx0Decompressor
         else
         {
             int value = 1;
+            int inverted = (flags & Zx0CompressionFlags.NoInvert) != 0 ? 0 : 1;
             while (ReadBit(input) == 0)
             {
-                value = (value << 1) | (ReadBit(input) ^ (inverted ? 1 : 0));
+                value = (value << 1) | (ReadBit(input) ^ inverted);
             }
 
             return value;

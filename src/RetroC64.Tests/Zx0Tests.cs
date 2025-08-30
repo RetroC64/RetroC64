@@ -30,11 +30,11 @@ public class Zx0Tests
         var b256Reversed = Enumerable.Range(0, 256).Select(x => (byte)(255 - x)).ToArray();
 
         byte[] data = [.. b16, .. b16, .. b256Reversed, .. b256Reversed];
-        var compressed = zx0Compressor.Compress(data, enableEliasLittleEndian: true);
+        var compressed = zx0Compressor.Compress(data, Zx0CompressionFlags.BitFire);
         Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
 
         var zx0Decompressor = new Zx0Decompressor();
-        var decompressed = zx0Decompressor.Decompress(compressed, enableEliasLittleEndian: true);
+        var decompressed = zx0Decompressor.Decompress(compressed, Zx0CompressionFlags.BitFire);
         CollectionAssert.AreEqual(data, decompressed.ToArray()); // Ensure decompression matches original data
     }
 
