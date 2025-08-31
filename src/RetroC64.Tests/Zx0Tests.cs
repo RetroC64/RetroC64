@@ -4,6 +4,7 @@
 
 using RetroC64.Packers;
 using System.Diagnostics;
+using RetroC64.Vice.Monitor.Responses;
 
 namespace RetroC64.Tests;
 
@@ -11,6 +12,8 @@ namespace RetroC64.Tests;
 public class Zx0Tests
 {
     private static readonly string Zx0TestFilesFolder = Path.Combine(AppContext.BaseDirectory, "zx0_test_files");
+    private static readonly string DaliExe = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "ext", "dali", "win-x64", "dali.exe"));
+
 
     [TestMethod]
     public void TestElias()
@@ -34,8 +37,40 @@ public class Zx0Tests
         Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
 
         var zx0Decompressor = new Zx0Decompressor();
-        var decompressed = zx0Decompressor.Decompress(compressed, Zx0CompressionFlags.BitFire);
+        var decompressed = zx0Decompressor.Decompress(compressed, Zx0CompressionFlags.BitFire, data.Length);
         CollectionAssert.AreEqual(data, decompressed.ToArray()); // Ensure decompression matches original data
+    }
+
+    /// <summary>
+    /// This method tests with ZX0 BitFire dali compressor and ensure we can decompress it correctly with our implementation.
+    /// </summary>
+    /// <param name="file"></param>
+    [TestMethod, OSCondition(OperatingSystems.Windows)]
+    [DynamicData(nameof(AllFilesDataSource))]
+    public void TestBitFireWithDali(string file)
+    {
+        if (!File.Exists(DaliExe))
+        {
+            Assert.Inconclusive($"Dali.exe not found at {DaliExe}");
+            return;
+        }
+
+        var outputFile = $"{file}.z";
+
+        RunExe(DaliExe, ["-o", outputFile, file]);
+        
+        var rawData = File.ReadAllBytes(outputFile).AsSpan();
+        var packedData = rawData.Slice(4);
+        var packedAddr = rawData[0] | (rawData[1] << 8);
+        var unpackedAddr = rawData[2] | (rawData[3] << 8);
+        var unpackedSize = packedAddr + packedData.Length - unpackedAddr + 2; // 2 bytes is the dest address of the unpacked data
+
+        var zx0Decompressor = new Zx0Decompressor();
+        var decompressed = zx0Decompressor.Decompress(packedData, Zx0CompressionFlags.BitFire, unpackedSize);
+
+        var original = File.ReadAllBytes(file).AsSpan().Slice(2);
+
+        CollectionAssert.AreEqual(original.ToArray(), decompressed.ToArray()); // Ensure decompression matches original data
     }
 
     [TestMethod]
@@ -78,6 +113,22 @@ public class Zx0Tests
         var zx0Decompressor = new Zx0Decompressor();
         var decompressed = zx0Decompressor.Decompress(compressed);
         CollectionAssert.AreEqual(data, decompressed.ToArray()); // Ensure decompression matches original data
+    }
+
+    [TestMethod]
+    [DynamicData(nameof(AllFilesDataSource))]
+    public void TestAllFilesWithBitFire(string path)
+    {
+        var zx0Compressor = new Zx0Compressor();
+        var data = File.ReadAllBytes(path).AsSpan().Slice(2);
+        var compressed = zx0Compressor.Compress(data, Zx0CompressionFlags.BitFire);
+        Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
+
+        Console.WriteLine($"File {Path.GetFileName(path)} Compressed {compressed.Length} bytes");
+
+        var zx0Decompressor = new Zx0Decompressor();
+        var decompressed = zx0Decompressor.Decompress(compressed, Zx0CompressionFlags.BitFire, data.Length);
+        CollectionAssert.AreEqual(data.ToArray(), decompressed.ToArray()); // Ensure decompression matches original data
     }
 
     private static IEnumerable<object[]> AllFilesDataSource

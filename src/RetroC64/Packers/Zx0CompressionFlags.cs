@@ -21,7 +21,7 @@ public enum Zx0CompressionFlags
     Backwards = 1 << 0,
 
     /// <summary>
-    /// Compress/decompress without invert encoding. This is forced if <see cref="BitFire"/> is selected.
+    /// Compress/decompress without invert encoding. This is forced if <see cref="BitFireEncoding"/> is selected.
     /// </summary>
     NoInvert = 1 << 1,
 
@@ -31,7 +31,20 @@ public enum Zx0CompressionFlags
     Quick = 1 << 2,
 
     /// <summary>
+    /// Encode/decode the elias gamma in little endian. This is forced if <see cref="BitFire"/> is selected.
+    /// </summary>
+    BitFireEncoding = (1 << 3),
+
+    /// <summary>
     /// Use ZX0 BitFire compression/decompression mode. This implies <see cref="NoInvert"/>.
     /// </summary>
-    BitFire = 1 << 3,
+    BitFire = BitFireEncoding | InPlace | NoInvert,
+
+    /// <summary>
+    /// Compress/decompress data in place. This is requiring that the packed data is put at the end of the unpacked buffer.
+    /// </summary>
+    /// <remarks>
+    /// This is default behavior of <see cref="BitFire"/> compression.
+    /// </remarks>
+    InPlace = 1 << 4,
 }

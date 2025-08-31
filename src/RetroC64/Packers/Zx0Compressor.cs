@@ -77,9 +77,9 @@ public unsafe class Zx0Compressor
     /// <param name="flags">The compression flags to use</param>
     /// <returns>Compressed data</returns>
     /// <remarks>
-    /// The return buffer is valid until the next call to <see cref="Compress(byte[],RetroC64.Packers.Zx0CompressionFlags,int)"/>.
+    /// The return buffer is valid until the next call to <see cref="Compress(System.Span{byte},RetroC64.Packers.Zx0CompressionFlags,int)"/>.
     /// </remarks>
-    public Span<byte> Compress(byte[] input, Zx0CompressionFlags flags = Zx0CompressionFlags.None, int skip = 0)
+    public Span<byte> Compress(Span<byte> input, Zx0CompressionFlags flags = Zx0CompressionFlags.None, int skip = 0)
     {
         return Compress(input, out _, flags, skip);
     }
@@ -93,12 +93,10 @@ public unsafe class Zx0Compressor
     /// <param name="skip">Number of bytes to skip at the beginning</param>
     /// <returns>Compressed data</returns>
     /// <remarks>
-    /// The return buffer is valid until the next call to <see cref="Compress(byte[],RetroC64.Packers.Zx0CompressionFlags,int)"/>.
+    /// The return buffer is valid until the next call to <see cref="Compress(System.Span{byte},RetroC64.Packers.Zx0CompressionFlags,int)"/>.
     /// </remarks>
-    public Span<byte> Compress(byte[] input, out int delta, Zx0CompressionFlags flags = Zx0CompressionFlags.None, int skip = 0)
+    public Span<byte> Compress(Span<byte> input, out int delta, Zx0CompressionFlags flags = Zx0CompressionFlags.None, int skip = 0)
     {
-        if (input == null) throw new ArgumentNullException(nameof(input));
-
         const int maxOffsetZx0 = 32640;
         const int maxOffsetZx7 = 2176;
 
@@ -121,7 +119,7 @@ public unsafe class Zx0Compressor
             byte* inputData = inputPtr;
             if ((flags & Zx0CompressionFlags.Backwards) != 0)
             {
-                input.AsSpan().Reverse();
+                input.Reverse();
             }
 
             var block = Optimize(inputData, input.Length, skip, offsetLimit);
@@ -574,12 +572,15 @@ public unsafe class Zx0Compressor
     }
 
     /// <summary>
-    /// Encodes the block chain into the output buffer.
+    /// Encodes the blockchain into the output buffer.
     /// </summary>
     private Span<byte> CompressInternal(Block* head, byte* input, int inputSize, int skip, Zx0CompressionFlags flags, out int delta)
     {
+        // Inplace encoding removes the need for an end marker.
         // End marker length in bits -> 25 = 1 bit end marker + 17 bits of elias gamma of 256 + 7 bits for upper byte band
-        var outputSize = (head->EncodedBits + 25) / 8;
+        var packedSize = (head->EncodedBits + ((flags & Zx0CompressionFlags.InPlace) != 0 ? 7 : 25)) / 8;
+
+        var outputBaseIndex = inputSize - packedSize;
 
         // Reverse the linked list of blocks to get them in the correct order
         Block* previousBlock = null;
@@ -592,11 +593,11 @@ public unsafe class Zx0Compressor
         }
         head = previousBlock; // Now head points to the first block in the reversed list
 
-        if (_output.Length < outputSize)
+        if (_output.Length < packedSize)
         {
-            _output = new byte[outputSize];
+            _output = new byte[packedSize];
         }
-        _diff = outputSize - inputSize + skip;
+        _diff = packedSize - inputSize + skip;
         delta = 0;
         _inputIndex = skip;
         _outputIndex = 0;
@@ -607,15 +608,18 @@ public unsafe class Zx0Compressor
 
         Block* block = head;
 
-        if ((flags & Zx0CompressionFlags.BitFire) != 0)
-        {
-            flags |= Zx0CompressionFlags.NoInvert;
-        }
+        // BitFire encoding always require no invert
         var noInvertFlags = flags | Zx0CompressionFlags.NoInvert;
+        if ((flags & Zx0CompressionFlags.BitFireEncoding) != 0)
+        {
+            flags = noInvertFlags;
+        }
 
         while (block is not null)
         {
             int length = block->Length;
+            var previousInputIndex = _inputIndex;
+            var previousOutputIndex = _outputIndex;
             if (block->IsLiteral)
             {
                 // copy literals indicator
@@ -644,7 +648,7 @@ public unsafe class Zx0Compressor
                 // copy from new offset MSB
                 WriteInterlacedEliasGamma((block->Offset - 1) / 128 + 1, flags);
                 // copy from new offset LSB
-                if ((flags & (Zx0CompressionFlags.Backwards | Zx0CompressionFlags.BitFire)) != 0)
+                if ((flags & (Zx0CompressionFlags.Backwards | Zx0CompressionFlags.BitFireEncoding)) != 0)
                     WriteByte(((block->Offset - 1) & 0x7F) << 1);
                 else
                     WriteByte((0x7F - (block->Offset - 1) & 0x7F) << 1);
@@ -657,6 +661,26 @@ public unsafe class Zx0Compressor
                 lastOffset = block->Offset;
             }
 
+            // Copy in place for bitfire if we reached the output base index
+            if ((flags & Zx0CompressionFlags.InPlace) != 0 && _inputIndex >= (outputBaseIndex + _outputIndex))
+            {
+                // Literal would overwrite packed data, so we go back to previous index
+                if (block->IsLiteral)
+                {
+                    _inputIndex = previousInputIndex;
+                    _outputIndex = previousOutputIndex;
+                }
+
+                while (_inputIndex < inputSize)
+                {
+                    WriteByte(input[_inputIndex]);
+                    ReadBytes(1, ref delta);
+                }
+
+                // TODO: release remaining blocks
+                break;
+            }
+
             //Console.WriteLine($"Literal: {block->IsLiteral} EncodedBits: {block->EncodedBits} Length: {block->Length} Round: {(block->EncodedBits + 7) / 8}, Position: {_outputIndex}");
             Debug.Assert((block->EncodedBits + 7) / 8 == _outputIndex);
 
@@ -666,11 +690,15 @@ public unsafe class Zx0Compressor
             block = nextBlock;
             ReleaseBlock(previousBlock); // Release the next block as we no longer need it
         }
-        // end marker
-        WriteBit(1);
-        WriteInterlacedEliasGamma(256, flags);
 
-        Debug.Assert(outputSize >= _outputIndex);
+        // end marker
+        if ((flags & Zx0CompressionFlags.InPlace) == 0)
+        {
+            WriteBit(1);
+            WriteInterlacedEliasGamma(256, flags);
+        }
+
+        //Debug.Assert(_outputIndex >= outputSize);
         return new Span<byte>(_output, 0, _outputIndex);
     }
 
@@ -744,7 +772,7 @@ public unsafe class Zx0Compressor
     {
         var bitIndex = GetHighestBitIndex(value);
         int bitMask = 1 << bitIndex;
-        if ((flags & Zx0CompressionFlags.BitFire) != 0 && bitIndex >= 8)
+        if ((flags & Zx0CompressionFlags.BitFireEncoding) != 0 && bitIndex >= 8)
         {
             // Reverse value LSB / MSB and clear highest bit
             value &= ~bitMask;

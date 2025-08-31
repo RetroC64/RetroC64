@@ -2,7 +2,6 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace RetroC64.Packers;
@@ -35,9 +34,13 @@ public class Zx0Decompressor
     /// </summary>
     /// <param name="input">Compressed data</param>
     /// <param name="flags">The compression flags. Default is <see cref="Zx0CompressionFlags.None"/>.</param>
+    /// <param name="outputSize">Output size mandatory parameter for <see cref="Zx0CompressionFlags.BitFire"/> or <see cref="Zx0CompressionFlags.InPlace"/> compression</param>
     /// <returns>Decompressed data as a <see cref="Span{byte}"/></returns>
-    public Span<byte> Decompress(ReadOnlySpan<byte> input, Zx0CompressionFlags flags = Zx0CompressionFlags.None)
+    public Span<byte> Decompress(ReadOnlySpan<byte> input, Zx0CompressionFlags flags = Zx0CompressionFlags.None, int outputSize = -1)
     {
+        if ((flags & Zx0CompressionFlags.InPlace) != 0 && outputSize < 0)
+            throw new ArgumentException("Output size must be specified when using BitFire compression", nameof(outputSize));
+        
         if (_output.Length < input.Length * 4)
         {
             _output = new byte[input.Length * 4];
@@ -50,26 +53,41 @@ public class Zx0Decompressor
         _backtrack = false;
         _lastByte = 0;
 
+        var baseInputIndex = outputSize - input.Length;
+
         int lastOffset = 1;
 
-        if ((flags & Zx0CompressionFlags.BitFire) != 0)
-        {
-            flags |= Zx0CompressionFlags.NoInvert;
-        }
         var flagsWithNoInverted = flags | Zx0CompressionFlags.NoInvert;
+        if ((flags & Zx0CompressionFlags.BitFireEncoding) != 0)
+        {
+            flags = flagsWithNoInverted;
+        }
 
     // Main decompression loop using ZX0 format control flow.
     CopyLiterals:
         int length = ReadInterlacedEliasGamma(input, flagsWithNoInverted);
         for (int i = 0; i < length; i++)
             WriteByte(ReadByte(input));
+
+        if ((flags & Zx0CompressionFlags.InPlace) != 0 && _outputIndex >= baseInputIndex + _inputIndex)
+        {
+            goto CopyInline;
+        }
+
         if (ReadBit(input) != 0)
         {
             goto CopyFromNewOffset;
         }
 
+        // Repeat from last offset
         length = ReadInterlacedEliasGamma(input, flagsWithNoInverted);
         WriteBytes(lastOffset, length);
+
+        if ((flags & Zx0CompressionFlags.InPlace) != 0 && _outputIndex >= baseInputIndex + _inputIndex)
+        {
+            goto CopyInline;
+        }
+
         if (ReadBit(input) == 0)
         {
             goto CopyLiterals;
@@ -77,14 +95,13 @@ public class Zx0Decompressor
             
         // ReSharper disable once BadChildStatementIndent
     CopyFromNewOffset:
-
         lastOffset = ReadInterlacedEliasGamma(input, flags);
         if (lastOffset == 256)
         {
-            return new Span<byte>(_output, 0, _outputIndex);
+            goto ReturnSpan;
         }
 
-        if ((flags & Zx0CompressionFlags.BitFire) != 0)
+        if ((flags & Zx0CompressionFlags.InPlace) != 0)
         {
             lastOffset = (((lastOffset - 1)  << 7) + (ReadByte(input) >> 1)) + 1;
         }
@@ -98,12 +115,27 @@ public class Zx0Decompressor
 
         WriteBytes(lastOffset, length);
 
+        if ((flags & Zx0CompressionFlags.InPlace) != 0 && _outputIndex >= baseInputIndex + _inputIndex)
+        {
+            goto CopyInline;
+        }
+
         if (ReadBit(input) == 0)
         {
             goto CopyLiterals;
         }
 
         goto CopyFromNewOffset;
+
+    CopyInline:
+        var remainingLength = input.Length - _inputIndex;
+        for (int i = 0; i < remainingLength; i++)
+        {
+            WriteByte(ReadByte(input));
+        }
+
+    ReturnSpan:
+        return new Span<byte>(_output, 0, _outputIndex);
     }
 
     /// <summary>
@@ -147,7 +179,7 @@ public class Zx0Decompressor
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int ReadInterlacedEliasGamma(ReadOnlySpan<byte> input, Zx0CompressionFlags flags)
     {
-        if ((flags & Zx0CompressionFlags.BitFire) != 0)
+        if ((flags & Zx0CompressionFlags.BitFireEncoding) != 0)
         {
             int lo = 1;
             while (ReadBit(input) == 0)
