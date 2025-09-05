@@ -11,6 +11,7 @@
     <File Path="dotnet-releaser.toml" />
     <File Path="global.json" />
   </Folder>
+  <Project Path="RetroC64.Core/RetroC64.Core.csproj" Id="7b410814-5b82-4c9b-86d6-32f3b10a7bf5" />
   <Project Path="RetroC64.Tests/RetroC64.Tests.csproj" />
   <Project Path="RetroC64.Vice/RetroC64.Vice.csproj" />
   <Project Path="RetroC64/RetroC64.csproj" />

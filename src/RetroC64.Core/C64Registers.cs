@@ -732,7 +732,7 @@ public static class C64Registers
     // I/O Flags and Enums
 
     /// <summary>
-    /// VIC-II Control Register 1 flags. Used with <see cref="VIC2_CONTROL1"/>.
+    /// VIC-II Control Register 1 flags. Used with <see cref="C64Registers.VIC2_CONTROL1"/>.
     /// </summary>
     [Flags]
     public enum VIC2Control1Flags : byte
@@ -760,7 +760,7 @@ public static class C64Registers
     }
 
     /// <summary>
-    /// VIC-II Control Register 2 flags. Used with <see cref="VIC2_CONTROL2"/>.
+    /// VIC-II Control Register 2 flags. Used with <see cref="C64Registers.VIC2_CONTROL2"/>.
     /// </summary>
     [Flags]
     public enum VIC2Control2Flags : byte
@@ -926,7 +926,7 @@ public static class C64Registers
         /// <summary>Serial direction, 0=Input, 1=Output.</summary>
         SerialPort = 1 << 6,
         /// <summary>TOD speed, 0=60Hz, 1=50Hz.</summary>
-        TimeOfDay = 1 << 7,
+        TimeOfDaySpeed = 1 << 7,
     }
 
     /// <summary>

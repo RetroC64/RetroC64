@@ -2,6 +2,8 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+// ReSharper disable InconsistentNaming
+
 using AsmMos6502;
 using System.Runtime.CompilerServices;
 using static RetroC64.C64Registers;
@@ -21,6 +23,24 @@ public static class C64AssemblerExtensions
     /// Modifies the A register.
     /// </remarks>
     public static Mos6502Assembler LDA_Imm<TEnum>(this Mos6502Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDA_Imm(Unsafe.As<TEnum, byte>(ref value));
+
+    /// <summary>
+    /// Logical AND. AND instruction (0x29) with addressing mode Immediate with an enum value.
+    /// </summary>
+    /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
+    public static Mos6502Assembler AND_Imm<TEnum>(this Mos6502Assembler asm, TEnum value) where TEnum : struct, Enum => asm.AND_Imm(Unsafe.As<TEnum, byte>(ref value));
+
+    /// <summary>
+    /// Logical Inclusive OR. ORA instruction (0x09) with addressing mode Immediate.
+    /// </summary>
+    /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
+    public static Mos6502Assembler ORA_Imm<TEnum>(this Mos6502Assembler asm, TEnum value) where TEnum : struct, Enum => asm.ORA_Imm(Unsafe.As<TEnum, byte>(ref value));
+
+    /// <summary>
+    /// Logical Exclusive OR (XOR). EOR instruction (0x49) with addressing mode Immediate.
+    /// </summary>
+    /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
+    public static Mos6502Assembler EOR_Imm<TEnum>(this Mos6502Assembler asm, TEnum value) where TEnum : struct, Enum => asm.EOR_Imm(Unsafe.As<TEnum, byte>(ref value));
 
     /// <summary>
     /// Sets up the stack pointer to $ff, which is the top of the C64 stack.
@@ -166,10 +186,10 @@ public static class C64AssemblerExtensions
             .StoreLabelAtAddress(rasterHandler, IRQ_VECTOR) // Store the IRQ handler address at the IRQ vector
 
             .LDA(VIC2_CONTROL1)
-            .AND_Imm(0b0111_1111) // Clear the high bit (bit 7) of the raster MSB in $d011
+            .AND_Imm(~VIC2Control1Flags.RasterHighBit) // Clear the high bit (bit 7) of the raster MSB in $d011
             .STA(VIC2_CONTROL1)
 
-            .LDA_Imm(0x01) // Enable VIC raster IRQ only
+            .LDA_Imm(VIC2InterruptEnableFlags.Raster) // Enable VIC raster IRQ only
             .STA(VIC2_INTERRUPT_ENABLE); // Store it in the VIC-II interrupt enable register
     }
 
@@ -210,4 +230,79 @@ public static class C64AssemblerExtensions
 
             .Label(skipNmi);
 
+    /// <summary>
+    /// Sets up the Time of Day (TOD) clock frequency (50Hz or 60Hz) on CIA2 and determines the vertical frequency (50Hz for PAL or 60Hz for NTSC).
+    /// </summary>
+    /// <param name="asm">The assembler instance.</param>
+    /// <returns>The assembler instance for chaining.The register A is set to bit 0 = 50Hz (PAL), bit 1 = 60Hz (NTSC)</returns>
+    /// <remarks>
+    /// This code must be set between a pair of SEI/CLI instructions to avoid interrupts during the timing-sensitive operation.
+    /// </remarks>
+    public static Mos6502Assembler SetupTimeOfDayAndGetVerticalFrequency(this Mos6502Assembler asm)
+    {
+        // From https://codebase64.pokefinder.org/doku.php?id=cia:efficient_tod_initialisation
+        // Credits to Silver Dream ! / Thorgal / W.F.M.H.
+        const ushort TOD_60_HI = 0x7f4a; // $7f4a for 60Hz TOD clock and 985248.444 CPU/CIA clock
+        const ushort TOD_60_LO = 0x70a6; // $70a6 for 60Hz TOD clock and 1022727.14 CPU/CIA clock
+        const ushort TOD_50_HI = 0x3251; // $3251 for 50Hz TOD clock and 985248.444 CPU/CIA clock
+        const ushort TOD_50_LO = 0x20c0; // $20c0 for 50Hz TOD clock and 1022727.14 CPU/CIA clock
+        const ushort TOD_MID = (TOD_60_HI + TOD_50_LO) >> 1; // Middle point between 50Hz and 60Hz
+        const ushort TOD_60_MID = (TOD_60_HI + TOD_60_LO) >> 1; // Middle point for 60Hz
+        const ushort TOD_50_MID = (TOD_50_HI + TOD_50_LO) >> 1; // Middle point for 50Hz
+
+        return asm
+            .LabelForward(out var ret) // Label at the end to return to
+            .LDA_Imm(0)
+            .STA(CIA2_TIME_OF_DAY_10THS)
+            .Label(out var waitTenth1)
+            .CMP(CIA2_TIME_OF_DAY_10THS)
+            .BEQ(waitTenth1)
+
+            // Count from $ffff (65535) down
+            .LDA_Imm(0xFF)
+            .STA(CIA2_TIMER_A_LO)
+            .STA(CIA2_TIMER_A_HI)
+
+            // Set 60Hz TOD mode (bit 7 cleared)
+            .LDA_Imm(CIAControlAFlags.Start | CIAControlAFlags.ForceLoad)
+            .STA(CIA2_CONTROL_A)
+
+            .Label(out var waitTenth2)
+            .CMP(CIA2_TIME_OF_DAY_10THS)
+            .BEQ(waitTenth2)
+
+            .LabelForward(out var tod60Hz)
+            .LDA(CIA2_TIMER_A_HI)
+
+            // Middle point between 50Hz and 60Hz
+            .CMP_Imm(TOD_MID >> 8)
+            .BCS(tod60Hz)
+
+            // 50Hz on TOD pin
+            .LabelForward(out var pal50)
+            // Check PAL or NTSC
+            .CMP_Imm(TOD_50_MID >> 8)
+
+            // Set TOD Clock to 50Hz (previously was 60Hz)
+            .LDA_Imm(CIAControlAFlags.TimeOfDaySpeed)
+            .STA(CIA2_CONTROL_A)
+
+            .BCS(pal50)
+
+            .LDA_Imm(0) // b1 : Vertical 60Hz (NTSC)
+            .JMP(ret)
+
+            .Label(tod60Hz)
+            // Check PAL or NTSC
+            .CMP_Imm(TOD_60_MID >> 8)
+            .BCS(pal50)
+
+            .LDA_Imm(0) // b1 : Vertical 60Hz (NTSC)
+            .JMP(ret)
+
+            .Label(pal50)
+            .LDA_Imm(1) // b0 : Vertical 50Hz (PAL)
+
+            .Label(ret);
+    }
 }

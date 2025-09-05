@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Loader\" />
+    <InternalsVisibleTo Include="RetroC64.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AsmMos6502" />
+  </ItemGroup>
+  
+
+</Project>
