@@ -2,7 +2,7 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
-namespace RetroC64.Disk;
+namespace RetroC64.Storage;
 
 /// <summary>
 /// Represents a directory entry on a Commodore disk, including file type, name, starting location, and size.

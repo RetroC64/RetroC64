@@ -4,7 +4,7 @@
 
 using System.Text;
 using CliWrap;
-using RetroC64.Disk;
+using RetroC64.Storage;
 
 namespace RetroC64.Tests;
 

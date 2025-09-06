@@ -4,7 +4,7 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="AsmMos6502" Version="2.2.1" />
+    <PackageVersion Include="AsmMos6502" Version="3.0.0" />
     <PackageVersion Include="CliWrap" Version="3.9.0" />
     <PackageVersion Include="MinVer" Version="6.0.0" />
     <PackageVersion Include="MSTest" Version="3.8.3" />

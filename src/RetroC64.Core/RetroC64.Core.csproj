@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
-
+    <RootNamespace>RetroC64</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

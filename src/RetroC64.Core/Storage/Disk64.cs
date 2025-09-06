@@ -10,7 +10,7 @@ using System.Text;
 
 // ReSharper disable InconsistentNaming
 
-namespace RetroC64.Disk;
+namespace RetroC64.Storage;
 
 /// <summary>
 /// Represents a Commodore 64 D64 disk image, providing methods for reading, writing, formatting, and managing files and sectors.
