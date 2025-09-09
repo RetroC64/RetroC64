@@ -10,7 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Loader\" />
     <InternalsVisibleTo Include="RetroC64.Tests" />
   </ItemGroup>
 
