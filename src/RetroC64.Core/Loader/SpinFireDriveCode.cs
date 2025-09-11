@@ -113,8 +113,7 @@ internal class SpinFireDriveCode
             .Append(12)
             // ondemand_entry
             .Label(ondemand_entry)
-            .LabelForward(out var init_post_fetch)
-            .JMP(init_post_fetch) // always
+            .JMP(out var init_post_fetch) // always
                                   // M-E bootstrap jumps to 604
                                   // Load misc, fetch, and decoding table
             .Label(out var start_init);
@@ -131,25 +130,22 @@ internal class SpinFireDriveCode
                 .BPL(loop);
         }
 
-        asm.LabelForward(out var dosreadblock);
+        asm
+            // lda #1 ; Read misc into $400
+            .LDA_Imm(1)
+            .JSR(out var dosreadblock)
+            // lda #0 ; Read fetch into $300
+            .LDA_Imm(0)
+            .JSR(dosreadblock)
+            // lda #2 ; Read gcr table into $500
+            .LDA_Imm(2)
+            .JSR(dosreadblock)
 
-        {
-            asm
-                // lda #1 ; Read misc into $400
-                .LDA_Imm(1)
-                .JSR(dosreadblock)
-                // lda #0 ; Read fetch into $300
-                .LDA_Imm(0)
-                .JSR(dosreadblock)
-                // lda #2 ; Read gcr table into $500
-                .LDA_Imm(2)
-                .JSR(dosreadblock)
+            .SEI()
 
-                .SEI()
-
-                .LDA_Imm(0x02)
-                .STA(0x1800); // Indicate busy
-        }
+            .LDA_Imm(0x02)
+            .STA(0x1800); // Indicate busy
+        
         // Clear all zeropage variables
         {
             asm
@@ -178,7 +174,6 @@ internal class SpinFireDriveCode
             .STX(0x1c05) // quick first timeout
 
             // Copy zp code into place
-            .LabelForward(out var zpcodeblock_to_relocate)
             .LabelForward(out var zpcodeblock_begin)
             .LabelForward(out var zpcodeblock_end);
 
@@ -187,7 +182,7 @@ internal class SpinFireDriveCode
         asm
             .LDX_Imm(zpcodeblock_length)
             .Label(out var zpcode_copy_loop)
-            .LDA(zpcodeblock_to_relocate, X)
+            .LDA(out var zpcodeblock_to_relocate, X)
             .STA(ZPORG, X)
             .DEX()
             .BPL(zpcode_copy_loop)
@@ -354,25 +349,22 @@ internal class SpinFireDriveCode
             .Label(nothing_fetched)
 
             // More sectors in the current batch?
-            .LabelForward(out var fetchmore)
             .LDA(ninterested)
-            .BNE(fetchmore)
+            .BNE(out var fetchmore)
 
             // Nothing new to fetch. Is the next batch on a new track?
-            .LabelForward(out var nonewtrack)
             .LDA_Imm(0x40)
             .BIT(2)
-            .BEQ(nonewtrack)
+            .BEQ(out var nonewtrack)
 
             .EOR(2)
             .STA(2)
 
-            .LabelForward(out var not18)
             .LDX(req_track)
             .INX()
             .INX()
             .CPX_Imm(18 * 2)
-            .BNE(not18)
+            .BNE(out var not18)
 
             .LDX_Imm(19 * 2)
 
@@ -383,17 +375,15 @@ internal class SpinFireDriveCode
             .Label(nonewtrack)
 
             // Do we have a stashed sector?
-            .LabelForward(out var nostash)
             .LDX(nstashed)
-            .BEQ(nostash)
+            .BEQ(out var nostash)
 
-            .LabelForward(out var transferbuf)
             .Label(sendstash)
             .DEX()
             .STX(nstashed)
             .TXA()
             .ORA_Imm((byte)(stashbufs >> 8))
-            .JMP(transferbuf)
+            .JMP(out var transferbuf)
 
             .Label(nostash)
 
@@ -407,9 +397,8 @@ internal class SpinFireDriveCode
             .INY()
 
             .Label(out var bitloop)
-            .LabelForward(out var notset)
             .ROR()
-            .BCC(notset)
+            .BCC(out var notset)
 
             .BEQ(newbyte)
 
@@ -421,36 +410,32 @@ internal class SpinFireDriveCode
             .DEX()
             .BPL(bitloop)
 
-            .LabelForward(out var nodemand)
             .LSR()
-            .BCC(nodemand)
+            .BCC(out var nodemand)
 
             .LDA_Imm(ondemand_fetchret.LowByte())
             .STA(mod_fetchret + 1)
             .LDA_Imm(18 * 2)
             .STA(req_track)
 
-            .LabelForward(out var checkunit0)
             .Label(nodemand)
             .LDA_Imm(0)
             .STA(bufptr + 1)
             .STA(mod_buf + 2)
-            .BEQ(checkunit0)
+            .BEQ(out var checkunit0)
 
             .Label(fetch_return)
-            .LabelForward(out var dontstash)
             // We have a valid sector in the buffer.
             // x is the sector number and z is set if
             // ninterested was decremented to zero.
-            .BEQ(dontstash)
+            .BEQ(out var dontstash)
 
             .LDY(nstashed)
             .CPY_Imm(2)
             .BCS(dontstash)
 
-            .LabelForward(out var dostash)
             .LDA(interested + 2, X)
-            .BNE(dostash)
+            .BNE(out var dostash)
 
             .LDA_Imm(0x04)
             .AND(0x1800)
@@ -502,10 +487,9 @@ internal class SpinFireDriveCode
             .BMI(nextunit)
 
             .Label(notfull)
-            .LabelForward(out var nocontrec)
             .INY()
             .ASL()
-            .BPL(nocontrec)
+            .BPL(out var nocontrec)
 
             .LDX_Imm(0)
 
@@ -524,18 +508,16 @@ internal class SpinFireDriveCode
             .DEC(temp)
             .BPL(copy)
 
-            .LabelForward(out var headdone)
             .LDA(_[bufptr], Y)
-            .BEQ(headdone)
+            .BEQ(out var headdone)
 
             .CMP_Imm(5)
             .BCC(headloop)
 
             .Label(headdone)
 
-            .LabelForward(out var neednodummy)
             .CPX_Imm(3)
-            .BNE(neednodummy)
+            .BNE(out var neednodummy)
 
             .TXA()
             .STA(0, X)
@@ -598,18 +580,15 @@ internal class SpinFireDriveCode
             .LDA(0x1c00)
             .LDX(req_track)
             .CPX(currtrack)
-            .LabelForward(out var fetch_here)
-            .BEQ(fetch_here)
+            .BEQ(out var fetch_here)
 
             .AND_Imm(0x0b) // clear zone and motor bits for now
-            .LabelForward(out var seek_up)
-            .BCS(seek_up)
+            .BCS(out var seek_up)
 
             .Label(out var seek_down)
             .DEC(currtrack)
             .ADC_Imm(3) // bits should decrease
-            .LabelForward(out var do_seek)
-            .BCC(do_seek)
+            .BCC(out var do_seek)
 
             .Label(seek_up)
             .INC(currtrack)
@@ -618,8 +597,7 @@ internal class SpinFireDriveCode
             .Label(do_seek)
             .LDY_Imm(3)
             .CPX_Imm(31 * 2)
-            .LabelForward(out var ratedone)
-            .BCS(ratedone)
+            .BCS(out var ratedone)
             .DEY()
             .CPX_Imm(25 * 2)
             .BCS(ratedone)
@@ -653,14 +631,12 @@ internal class SpinFireDriveCode
             .Label(out var fetchblock)
             .LDX_Imm((byte)Mos6510OpCode.BEQ_Relative)
             .LDA(safety)
-            .LabelForward(out var nosaf)
-            .BEQ(nosaf)
+            .BEQ(out var nosaf)
 
             .LDX_Imm((byte)Mos6510OpCode.LDA_Immediate)
 
             .Label(nosaf)
-            .LabelForward(out var mod_safety)
-            .STX(mod_safety)
+            .STX(out var mod_safety)
 
             .Label(out var prof_sync)
             .LDX_Imm(0)
@@ -709,8 +685,7 @@ internal class SpinFireDriveCode
             .LDA(interested, Y)
 
             .Label(mod_safety)
-            .LabelForward(out var notint)
-            .BEQ(notint)
+            .BEQ(out var notint)
 
             .JMP(zpc_entry)
 
@@ -783,17 +758,15 @@ internal class SpinFireDriveCode
                 .LDX_Imm(2)
 
                 .Label(out var loop)
-                .LabelForward(out var nowrap)
                 .INY()
                 .CPY(tracklength)
-                .BCC(nowrap)
+                .BCC(out var nowrap)
 
                 .LDY_Imm(0)
 
                 .Label(nowrap)
-                .LabelForward(out var fetchblock0)
                 .LDA(interested, Y)
-                .BNE(fetchblock0)
+                .BNE(out var fetchblock0)
 
                 .DEX()
                 .BNE(loop)
@@ -839,8 +812,7 @@ internal class SpinFireDriveCode
             .Label(out var prof_comm)
 
             .Label(out var nodatarequest)
-            .LabelForward(out var reset)
-            .BEQ(reset)
+            .BEQ(out var reset)
 
             .JMP(async_cmd)
 
@@ -858,9 +830,8 @@ internal class SpinFireDriveCode
 
             .LDX_Imm(2) // MORE
 
-            .LabelForward(out var notlast)
             .LDA(bufptr + 1) // are we transferring postponed units?
-            .BNE(notlast)
+            .BNE(out var notlast)
 
             // Wait for the host to pull clock before we
             // can transmit a postponed unit.
@@ -870,9 +841,8 @@ internal class SpinFireDriveCode
             .BIT(0x1800)
             .BEQ(waitclk)
 
-            .LabelForward(out var nochain)
             .CPX(chunklen) // is it a chain head?
-            .BNE(nochain)
+            .BNE(out var nochain)
 
             .LDX_Imm(0xa) // MORE + force chain
 
@@ -893,8 +863,7 @@ internal class SpinFireDriveCode
             .STX(nextstatus)
 
             .AND_Imm(2)
-            .LabelForward(out var keepmotor)
-            .BNE(keepmotor)
+            .BNE(out var keepmotor)
 
             // We are about to wait for the host at a job boundary.
             // If the host doesn't pull clock within one second,
@@ -942,8 +911,7 @@ internal class SpinFireDriveCode
             .ALR_Imm(5)
             .BCC(nodatarequest)
 
-            .LabelForward(out var readyforchain)
-            .BNE(readyforchain) // host did pull clock
+            .BNE(out var readyforchain) // host did pull clock
 
             // The host is currently dealing with a chain, so we
             // have to pull clock as part of the exit status flags
@@ -955,8 +923,7 @@ internal class SpinFireDriveCode
 
             // In this case, we know the motor is already running.
 
-            .LabelForward(out var motorok)
-            .BNE(motorok) // always
+            .BNE(out var motorok) // always
 
             .Label(readyforchain)
 
@@ -975,8 +942,7 @@ internal class SpinFireDriveCode
 
             .LAX(chunkprefix)
             .AND_Imm(0x0f)
-            .LabelForward(out var sendentry)
-            .BPL(sendentry)
+            .BPL(out var sendentry)
 
             // Writes to $1800 must happen 13 cycles after atn changed, worst case.
             // Atn can change 4 cycles after writing to $1800, worst case.
@@ -1039,8 +1005,7 @@ internal class SpinFireDriveCode
             .STA(0x1800) // pull data (BUSY), release the clock line
 
             .INY()
-            .LabelForward(out var nomoreunits)
-            .BEQ(nomoreunits)
+            .BEQ(out var nomoreunits)
 
             .Label(checkunit)
             .LDA(_[bufptr], Y)
@@ -1086,8 +1051,7 @@ internal class SpinFireDriveCode
 
             .LDY_Imm(10)
             .Label(out var copyretry)
-            .LabelForward(out var retrysector)
-            .LDA(retrysector, Y)
+            .LDA(out var retrysector, Y)
             .STA(0x100, Y)
             .DEY()
             .BPL(copyretry)
@@ -1098,8 +1062,7 @@ internal class SpinFireDriveCode
             .LDX_Imm(2)
             .Label(out var flipcheck)
             .LDA(0x105, X)
-            .LabelForward(out var nextsideid)
-            .CMP(nextsideid, X)
+            .CMP(out var nextsideid, X)
             .BNE(badflip)
 
             .DEX()
@@ -1150,8 +1113,7 @@ internal class SpinFireDriveCode
 
             .Label(out var bitloop)
             .BIT(0x1800)
-            .LabelForward(out var async_reset)
-            .BPL(async_reset) // system reset detected
+            .BPL(out var async_reset) // system reset detected
             .LDX_Imm(0x10)
             .STX(0x1800) // release data
 
@@ -1164,8 +1126,7 @@ internal class SpinFireDriveCode
             .LDX_Imm(2)
 
             .BIT(0x1800)
-            .LabelForward(out var got0)
-            .BEQ(got0)
+            .BEQ(out var got0)
 
             .SEC()
 
@@ -1180,17 +1141,15 @@ internal class SpinFireDriveCode
 
             // At this point, the host returns from the seek call.
 
-            .LabelForward(out var seektrack)
-            .LabelForward(out var seeksector)
-            .LabelForward(out var seek_fetchret)
 
             .LDY(temp)
-            .LDA(seektrack, Y)
+            .LDA(out var seektrack, Y)
             .STA(req_track)
-            .LDX(seeksector, Y)
+            .LDX(out var seeksector, Y)
             .INC(interested, X)
             .INC(ninterested)
 
+            .LabelForward(out var seek_fetchret)
             .LDA_Imm(0x0c)
             .STA(ledmask)
             .LDA_Imm(seek_fetchret.LowByte())
@@ -1216,9 +1175,8 @@ internal class SpinFireDriveCode
             // targetting the first job. In that case, we should
             // change from track 18 to track 1.
 
-            .LabelForward(out var notfirst)
             .ASL(0x103)
-            .BCS(notfirst)
+            .BCS(out var notfirst)
 
             .LDA_Imm(1 * 2)
             .STA(req_track)
