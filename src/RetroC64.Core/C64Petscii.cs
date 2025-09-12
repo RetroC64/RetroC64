@@ -5,6 +5,7 @@
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace RetroC64;
 
@@ -33,6 +34,41 @@ public static class C64Petscii
     /// <param name="shifted">A boolean indicating whether to use the shifted character mapping. Defaults to <c>false</c>.</param>
     /// <returns>The character corresponding to the specified byte value.</returns>
     public static char ToChar(byte b, bool shifted = false) => Unsafe.Add(ref MemoryMarshal.GetReference(shifted ? Shifted: Unshifted), b);
+    
+    public static byte[] ToScreenCode(string text)
+    {
+        var buffer = ToBytes(text);
+        return PetsciiToScreenCode(buffer);
+    }
+
+    public static byte[] PetsciiToScreenCode(ReadOnlySpan<byte> buffer)
+    {
+        // From https://sta.c64.org/cbm64pettoscr.html
+        var dest = new byte[buffer.Length];
+        for (var i = 0; i < buffer.Length; i++)
+        {
+            var b = buffer[i];
+            if (b <= 0x1F) b += 0x80;
+            else if (b >= 0x40 && b <= 0x5F) b -= 0x40;
+            else if (b >= 0x60 && b <= 0x7F) b -= 0x20;
+            else if (b >= 0x80 && b <= 0x9F) b += 0x40;
+            else if (b >= 0xA0 && b <= 0xBF) b -= 0x40;
+            else if (b >= 0xC0 && b <= 0xFE) b -= 0x80;
+            else if (b == 0xFF) b = 0x5E;
+            dest[i] = b;
+        }
+        return dest;
+    }
+    
+    public static byte[] ToBytes(string str)
+    {
+        var buffer = new List<byte>();
+        foreach (var c in str)
+        {
+            buffer.Add(ToByte(c));
+        }
+        return buffer.ToArray();
+    }
 
     // Tables from https://en.wikipedia.org/wiki/PETSCII
 

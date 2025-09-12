@@ -9,7 +9,6 @@
 
 using AsmMos6502;
 using AsmMos6502.Expressions;
-using System.Runtime.CompilerServices;
 using static AsmMos6502.Mos6502Factory;
 // ReSharper disable IdentifierTypo
 
@@ -19,7 +18,7 @@ namespace RetroC64.Loader;
 /// C# translation of drivecode.s for the 1541, using Mos6510Assembler.
 /// All comments are preserved from the original source.
 /// </summary>
-internal class SpinFireDriveCode
+internal partial class SpinFire
 {
     // ---------------------- Memory Layout and Constants ----------------------
 
@@ -51,7 +50,7 @@ internal class SpinFireDriveCode
 
     public bool GenerateErrors { get; set; }
     
-    public void Assemble(Mos6510Assembler asm)
+    public void AssembleDriveCode(Mos6510Assembler asm)
     {
         // Spindle by lft, linusakesson.net/software/spindle/
         // This code executes inside the 1541.
@@ -120,15 +119,13 @@ internal class SpinFireDriveCode
 
         asm.LabelForward(out var initts);
 
-        {
-            asm
-                .LDX_Imm(5)
-                .Label(out var loop)
-                .LDA(initts, X)
-                .STA(6, X)
-                .DEX()
-                .BPL(loop);
-        }
+        asm
+            .LDX_Imm(5)
+            .Label(out var loop1)
+            .LDA(initts, X)
+            .STA(6, X)
+            .DEX()
+            .BPL(loop1);
 
         asm
             // lda #1 ; Read misc into $400
@@ -147,15 +144,13 @@ internal class SpinFireDriveCode
             .STA(0x1800); // Indicate busy
         
         // Clear all zeropage variables
-        {
-            asm
-                .LDX_Imm(0)
-                .TXA()
-                .Label(out var loop)
-                .STA(0, X)
-                .INX()
-                .BNE(loop);
-        }
+        asm
+            .LDX_Imm(0)
+            .TXA()
+            .Label(out var loop2)
+            .STA(0, X)
+            .INX()
+            .BNE(loop2);
 
         asm
             // Read mode, SO enabled
@@ -211,10 +206,10 @@ internal class SpinFireDriveCode
             .STA(ondemand_dest + 2)
             .Label(out var ll)
             .BIT(0x1800) // Wait until the host is up (atn held)
-            .BPL(ll);
+            .BPL(ll)
 
-        // Initialisation complete.
-        asm.LDA_Imm(1 * 2)
+            // Initialisation complete.
+            .LDA_Imm(1 * 2)
             .STA(req_track)
             .LDA_Imm(fetch_return.LowByte())
             .STA(mod_fetchret + 1)
@@ -251,16 +246,16 @@ internal class SpinFireDriveCode
             .LAX(0x1c01) // lax1c01
             .ARR_Imm(0xf0) // arr imm, ddddd000
             .CLV()
-            .TAY()
-            .Label(out var zpc_mod3)
+            .TAY();
+        asm.Label(out var zpc_mod3)
             .LDA(gcrdecode)
             .ORA(gcrdecode + 1, Y)
 
             .Label(out var llZp1)
             .BVC(llZp1)
 
-            .PHA()
-            .Label(zpc_entry)
+            .PHA();
+        asm.Label(zpc_entry)
             .LDA_Imm(0x0f)
             .LabelForward(out var zpc_mod5)
             .SAX((zpc_mod5 + 1).LowByte())
@@ -270,8 +265,8 @@ internal class SpinFireDriveCode
             .SAX((zpc_mod7 + 1).LowByte())
             .ALR_Imm(0xfc)
             .TAY()
-            .LDX_Imm(0x79)
-            .Label(zpc_mod5)
+            .LDX_Imm(0x79);
+        asm.Label(zpc_mod5)
             .LDA(gcrdecode, X)
             .EOR(gcrdecode + 0x40, Y)
             .PHA()
@@ -284,8 +279,8 @@ internal class SpinFireDriveCode
             .BVC(llZp2)
 
             .LDA_Imm(0xe0)
-            .SBX_Imm(0x00)
-            .Label(zpc_mod7)
+            .SBX_Imm(0x00);
+        asm.Label(zpc_mod7)
             .LDA(gcrdecode, X)
             .ORA(gcrdecode + 0x20, Y)
             .PHA()
@@ -305,16 +300,18 @@ internal class SpinFireDriveCode
             .LabelForward(out var zpc_mod2)
             .SAX((zpc_mod2 + 1).LowByte())
             .ALR_Imm(0x3f)
-            .STA((zpc_mod3 + 1).LowByte())
-            .Label(zpc_mod1)
-            .LDA(gcrdecode)
-            .Label(zpc_mod2)
+            .STA((zpc_mod3 + 1).LowByte());
+        asm.Label(zpc_mod1)
+            .LDA(gcrdecode);
+        asm.Label(zpc_mod2)
             .EOR(gcrdecode, Y)
             .PHA()
             .TSX()
             .Label(zpc_bne);
+
         BNE_WITH_NOP = (zpc_loop - (zpc_bne + 2));
         BNE_WITHOUT_NOP = BNE_WITH_NOP + 1;
+
         asm
             .BNE(zpc_loop_without_nop)
             .LDX((zpc_mod3 + 1).LowByte())
@@ -332,27 +329,28 @@ internal class SpinFireDriveCode
             // The new drivecode is now on the stack page; move it.
             .Label(ondemand_fetchret)
 
-            .LDX_Imm(0)
+            .LDX_Imm(0);
 
-            .Label(out var ondemand_move_loop)
+        asm.Label(out var ondemand_move_loop)
 
-            .LDA(0x100, X) // TODO: use label?
+            .LDA(0x100, X); // TODO: use label?
 
-            .Label(ondemand_dest)
+        asm.Label(ondemand_dest)
             .STA(0x200, X) // TODO: use label?
             .INX()
             .BNE(ondemand_move_loop)
 
-            .JMP(ondemand_entry)
+            .JMP(ondemand_entry);
 
-            // nothing_fetched
-            .Label(nothing_fetched)
-
+        asm.Label(nothing_fetched)
             // More sectors in the current batch?
+
             .LDA(ninterested)
             .BNE(out var fetchmore)
 
-            // Nothing new to fetch. Is the next batch on a new track?
+            // Nothing new to fetch.
+            // Is the next batch on a new track?
+
             .LDA_Imm(0x40)
             .BIT(2)
             .BEQ(out var nonewtrack)
@@ -366,37 +364,37 @@ internal class SpinFireDriveCode
             .CPX_Imm(18 * 2)
             .BNE(out var not18)
 
-            .LDX_Imm(19 * 2)
+            .LDX_Imm(19 * 2);
 
-            .Label(not18)
+        asm.Label(not18)
             .STX(req_track)
-            .BNE(fetchmore)
+            .BNE(fetchmore);
 
-            .Label(nonewtrack)
+        asm.Label(nonewtrack)
 
             // Do we have a stashed sector?
             .LDX(nstashed)
-            .BEQ(out var nostash)
+            .BEQ(out var nostash);
 
-            .Label(sendstash)
+        asm.Label(sendstash)
             .DEX()
             .STX(nstashed)
             .TXA()
             .ORA_Imm((byte)(stashbufs >> 8))
-            .JMP(out var transferbuf)
+            .JMP(out var transferbuf);
 
-            .Label(nostash)
+        asm.Label(nostash)
 
             // Unpack the continuation buffer.
             .LDY_Imm(0)
             .LDX_Imm(20)
-            .SEC()
+            .SEC();
 
-            .Label(out var newbyte)
+        asm.Label(out var newbyte)
             .LDA(0, Y)
-            .INY()
+            .INY();
 
-            .Label(out var bitloop)
+        asm.Label(out var bitloop)
             .ROR()
             .BCC(out var notset)
 
@@ -404,9 +402,9 @@ internal class SpinFireDriveCode
 
             .INC(interested, X)
             .INC(ninterested)
-            .CLC()
+            .CLC();
 
-            .Label(notset)
+        asm.Label(notset)
             .DEX()
             .BPL(bitloop)
 
@@ -416,15 +414,15 @@ internal class SpinFireDriveCode
             .LDA_Imm(ondemand_fetchret.LowByte())
             .STA(mod_fetchret + 1)
             .LDA_Imm(18 * 2)
-            .STA(req_track)
+            .STA(req_track);
 
-            .Label(nodemand)
+        asm.Label(nodemand)
             .LDA_Imm(0)
             .STA(bufptr + 1)
             .STA(mod_buf + 2)
-            .BEQ(out var checkunit0)
+            .BEQ(out var checkunit0);
 
-            .Label(fetch_return)
+        asm.Label(fetch_return)
             // We have a valid sector in the buffer.
             // x is the sector number and z is set if
             // ninterested was decremented to zero.
@@ -439,9 +437,9 @@ internal class SpinFireDriveCode
 
             .LDA_Imm(0x04)
             .AND(0x1800)
-            .BNE(dontstash)
+            .BNE(dontstash);
 
-            .Label(dostash)
+        asm.Label(dostash)
             // Stash this sector, then go fetch another one.
 
             .LabelForward(out var mod_dest)
@@ -449,30 +447,30 @@ internal class SpinFireDriveCode
             .ORA_Imm((byte)(stashbufs >> 8))
             .STA(mod_dest + 2)
 
-            .LDX_Imm(0)
+            .LDX_Imm(0);
 
-            .Label(out var stash_loop)
-            .LDA(0x100, X)
-            .Label(mod_dest)
+        asm.Label(out var stash_loop)
+            .LDA(0x100, X);
+        asm.Label(mod_dest)
             .STA(stashbufs, X)
             .DEX()
             .BNE(stash_loop)
 
-            .INC(nstashed)
-            .Label(fetchmore)
-            .JMP(drivecode_fetch)
+            .INC(nstashed);
+        asm.Label(fetchmore)
+            .JMP(drivecode_fetch);
 
-            .Label(dontstash)
+        asm.Label(dontstash);
 
-            .Label(transfer)
+        asm.Label(transfer)
             // Turn off LED.
 
             .LDA(0x1c00)
             .AND_Imm(0x77)
             .STA(0x1c00)
 
-            .LDA_Imm(1)
-            .Label(transferbuf)
+            .LDA_Imm(1);
+        asm.Label(transferbuf)
             .STA(bufptr + 1)
             .STA(mod_buf + 2)
 
@@ -484,9 +482,12 @@ internal class SpinFireDriveCode
             .BPL(notfull)
 
             .LDA_Imm(0xff)
-            .BMI(nextunit)
+            .BMI(nextunit); // always
 
-            .Label(notfull)
+        asm.Label(notfull)
+
+            // Is there a continuation record?
+
             .INY()
             .ASL()
             .BPL(out var nocontrec)
@@ -497,10 +498,10 @@ internal class SpinFireDriveCode
             // sector set that can be followed by one or more
             // postponed units of size 2..4.
 
-            .LDA_Imm(2)
-            .Label(out var headloop)
-            .STA(temp)
-            .Label(out var copy)
+            .LDA_Imm(2); // number of bytes to copy - 1
+        asm.Label(out var headloop)
+            .STA(temp);
+        asm.Label(out var copy)
             .LDA(_[bufptr], Y)
             .INY()
             .STA(0, X)
@@ -512,40 +513,57 @@ internal class SpinFireDriveCode
             .BEQ(out var headdone)
 
             .CMP_Imm(5)
-            .BCC(headloop)
+            .BCC(headloop);
 
-            .Label(headdone)
+        asm.Label(headdone)
 
             .CPX_Imm(3)
             .BNE(out var neednodummy)
 
+            // No chain heads. We have to insert a do-nothing unit
+            // in order to report to the host whether the job is complete.
+
             .TXA()
             .STA(0, X)
-            .LDX_Imm(7)
-            .Label(neednodummy)
+            .LDX_Imm(7);
+        asm.Label(neednodummy)
             .LDA_Imm(0)
-            .STA(0, X)
-            .Label(nocontrec)
+            .STA(0, X);
+        asm.Label(nocontrec);
 
-            .Label(checkunit0)
-            .JMP(checkunit)
+            // Y points to the length byte of the first hostside unit.
 
-            .Label(nextunit)
-            .STA(chunklen)
+        asm.Label(checkunit0)
+            .JMP(checkunit);
+
+        asm.Label(nextunit)
+            // A is the length of the next unit.
+
+            // We use the length to compute where the unit ends.
+            // We will also transfer the length, but for that we
+            // have to scramble the bits.
+
+            .STA(chunklen) // not counting the length byte
             .LDX_Imm(0x09)
             .SBX_Imm(0x00)
             .EOR(scramble, X)
             .STA(chunkprefix)
-            .JMP(comm_continue)
+            .JMP(comm_continue);
 
-            .Label(async_cmd)
+        asm.Label(async_cmd)
+
+            // Pull data to indicate busy.
+            // 33 cycles after atn edge, worst case.
 
             .STA(0x1800)
-            .LDX_Imm(23)
-            .LDA_Imm(0)
 
-            .Label(out var async_clear_loop)
-            .STA(interested, X)
+            // Incoming asynchronous command. Clear pending work.
+
+            .LDX_Imm(23)
+            .LDA_Imm(0);
+
+        asm.Label(out var async_clear_loop)
+            .STA(interested, X) // also ninterested
             .DEX()
             .BPL(async_clear_loop)
 
@@ -570,11 +588,9 @@ internal class SpinFireDriveCode
         Mos6502Label ondemand_fetchret, Mos6502Label sendstash)
     {
         asm.Org(address)
-            .Label(drivecode_fetch)
-            // Fetch code for reading from disk and GCR decoding
-            // Wait for previous step to settle
-            .Label(out var wait)
-            .BIT(0x1c0d)
+            .Label(drivecode_fetch);
+        asm.Label(out var wait)
+            .BIT(0x1c0d) // Wait for previous step to settle
             .BPL(wait)
 
             .LDA(0x1c00)
@@ -583,18 +599,18 @@ internal class SpinFireDriveCode
             .BEQ(out var fetch_here)
 
             .AND_Imm(0x0b) // clear zone and motor bits for now
-            .BCS(out var seek_up)
+            .BCS(out var seek_up);
 
-            .Label(out var seek_down)
+        asm.Label(out var seek_down)
             .DEC(currtrack)
             .ADC_Imm(3) // bits should decrease
-            .BCC(out var do_seek)
+            .BCC(out var do_seek);
 
-            .Label(seek_up)
+        asm.Label(seek_up)
             .INC(currtrack)
-            .ADC_Imm(0) // bits should increase (adc #$01-1)
+            .ADC_Imm(0); // bits should increase (adc #$01-1)
 
-            .Label(do_seek)
+        asm.Label(do_seek)
             .LDY_Imm(3)
             .CPX_Imm(31 * 2)
             .BCS(out var ratedone)
@@ -604,9 +620,9 @@ internal class SpinFireDriveCode
             .DEY()
             .CPX_Imm(18 * 2)
             .BCS(ratedone)
-            .DEY()
+            .DEY();
 
-            .Label(ratedone)
+        asm.Label(ratedone)
             .LDX(zonebranch, Y)
             .STX((zpc_bne + 1).LowByte())
 
@@ -617,32 +633,34 @@ internal class SpinFireDriveCode
             .STA(0x1c00)
 
             .LDY_Imm(0x19)
-            .STY(0x1c05) // write latch & counter, clear int
+            .STY(0x1c05); // write latch & counter, clear int
 
-            .Label(out var nosectors)
-            .JMP(nothing_fetched)
+        asm.Label(out var nosectors)
+            .JMP(nothing_fetched);
 
-            .Label(fetch_here)
+        asm.Label(fetch_here)
             .LDX(ninterested)
             .BEQ(nosectors)
             .ORA(ledmask) // turn on motor and usually LED
-            .STA(0x1c00)
+            .STA(0x1c00);
 
-            .Label(out var fetchblock)
+        asm.Label(out var fetchblock)
             .LDX_Imm((byte)Mos6510OpCode.BEQ_Relative)
             .LDA(safety)
             .BEQ(out var nosaf)
 
-            .LDX_Imm((byte)Mos6510OpCode.LDA_Immediate)
+            .LDX_Imm((byte)Mos6510OpCode.LDA_Immediate);
 
-            .Label(nosaf)
-            .STX(out var mod_safety)
+        asm.Label(nosaf)
+            .STX(out var mod_safety);
 
-            .Label(out var prof_sync)
-            .LDX_Imm(0)
-            .TXS()
+        asm.Label(out var prof_sync)
+            // Wait for a data block
 
-            .Label(out var waitsync)
+            .LDX_Imm(0) // will be ff when entering the loop
+            .TXS();
+
+        asm.Label(out var waitsync)
             .BIT(0x1c00)
             .BPL(waitsync)
 
@@ -668,46 +686,46 @@ internal class SpinFireDriveCode
             .STA(first_mod3 + 1)
 
             .BVC(-2)
-            .LAX(0x1c01)
-            .ARR_Imm(0xf0)
+            .LAX(0x1c01) // ddddeeee
+            .ARR_Imm(0xf0) // ddddd000
             .CLV()
-            .TAY()
+            .TAY();
 
-            .Label(first_mod3)
-            .LDA(gcrdecode)
-            .ORA(gcrdecode + 1, Y)
-            .PHA()
+        asm.Label(first_mod3)
+            .LDA(gcrdecode) // lsb = 000ccccc
+            .ORA(gcrdecode + 1, Y) // y = ddddd000, lsb = 00000001
+            .PHA() // first byte to $100
 
             // get sector number from the lowest 5 bits of the first byte
 
             .AND_Imm(0x1f)
             .TAY()
-            .LDA(interested, Y)
+            .LDA(interested, Y);
 
-            .Label(mod_safety)
+        asm.Label(mod_safety)
             .BEQ(out var notint)
 
-            .JMP(zpc_entry)
+            .JMP(zpc_entry); // x = ----eeee
 
-            .Label(zp_return)
-            .ARR_Imm(0xf0)
+        asm.Label(zp_return)
+            .ARR_Imm(0xf0) // ddddd000
             .TAY()
-            .LDA(gcrdecode, X)
-            .ORA(gcrdecode + 1, Y)
+            .LDA(gcrdecode, X) // x = 000ccccc
+            .ORA(gcrdecode + 1, Y); // y = ddddd000, lsb = 00000001
 
-            .Label(out var prof_sum)
+        asm.Label(out var prof_sum)
             .LabelForward(out var badsum);
 
         if (GenerateErrors)
         {
             asm.LDX_Imm(0x3f)
-                .Label(out var loop)
+                .Label(out var loop1)
                 .EOR(0x100, X)
                 .EOR(0x140, X)
                 .EOR(0x180, X)
                 .EOR(0x1c0, X)
                 .DEX()
-                .BPL(loop)
+                .BPL(loop1)
 
                 .TAX()
                 .BNE(badsum)
@@ -719,7 +737,7 @@ internal class SpinFireDriveCode
         else
         {
             asm.LDX_Imm(0x1f)
-                .Label(out var loop)
+                .Label(out var loop1)
                 .EOR(0x100, X)
                 .EOR(0x120, X)
                 .EOR(0x140, X)
@@ -729,66 +747,65 @@ internal class SpinFireDriveCode
                 .EOR(0x1c0, X)
                 .EOR(0x1e0, X)
                 .DEX()
-                .BPL(loop)
+                .BPL(loop1)
 
                 .TAX()
                 .BNE(badsum);
         }
 
-        {
-            asm
-                .LSR(safety)
-                .BCS(badsum)
+        
+        asm
+            .LSR(safety)
+            .BCS(badsum)
 
-                .LDA(0x100)
-                .AND_Imm(0x1f)
-                .TAX()
-                .LSR(interested, X)
-                .DEC(ninterested)
+            .LDA(0x100)
+            .AND_Imm(0x1f)
+            .TAX()
+            .LSR(interested, X)
+            .DEC(ninterested);
 
-                .Label(mod_fetchret)
-                .JMP(ondemand_fetchret) // usually jmp fetch_return
+        asm.Label(mod_fetchret)
+            .JMP(ondemand_fetchret); // usually jmp fetch_return
 
-                .Label(notint)
+        asm.Label(notint)
 
-                // Are we keeping up with the Commodore ?
-                // The block under the drive head isn't interesting.
-                // So if no interesting block is about to arrive...
+            // Are we keeping up with the Commodore ?
+            // The block under the drive head isn't interesting.
+            // So if no interesting block is about to arrive...
 
-                .LDX_Imm(2)
+            .LDX_Imm(2);
 
-                .Label(out var loop)
-                .INY()
-                .CPY(tracklength)
-                .BCC(out var nowrap)
+        asm.Label(out var loop)
+            .INY()
+            .CPY(tracklength)
+            .BCC(out var nowrap)
 
-                .LDY_Imm(0)
+            .LDY_Imm(0);
 
-                .Label(nowrap)
-                .LDA(interested, Y)
-                .BNE(out var fetchblock0)
+        asm.Label(nowrap)
+            .LDA(interested, Y)
+            .BNE(out var fetchblock0)
 
-                .DEX()
-                .BNE(loop)
+            .DEX()
+            .BNE(loop)
 
-                // ...and we have a stashed sector...
-                .LDX(nstashed)
-                .BEQ(fetchblock0)
+            // ...and we have a stashed sector...
+            .LDX(nstashed)
+            .BEQ(fetchblock0)
 
-                // ...and the host has nothing better to do...
-                .LDA_Imm(4)
-                .BIT(0x1800)
-                .BEQ(fetchblock0)
+            // ...and the host has nothing better to do...
+            .LDA_Imm(4)
+            .BIT(0x1800)
+            .BEQ(fetchblock0)
 
-                // ...then now is a good time to transmit it.
-                .JMP(sendstash)
-                .Label(fetchblock0)
+            // ...then now is a good time to transmit it.
+            .JMP(sendstash);
+        asm.Label(fetchblock0);
 
-                .Label(badsum)
-                .JMP(fetchblock)
+        asm.Label(badsum)
+            .JMP(fetchblock)
 
-                .AppendBytes(256 - asm.CurrentOffset, 0xcc);
-        }
+            .AppendBytes(256 - asm.CurrentOffset, 0xcc);
     }
 
     private void AssembleCommunication(ushort address, Mos6510Assembler asm, Mos6502ExpressionU16 BNE_WITH_NOP, Mos6502ExpressionU16 BNE_WITHOUT_NOP, Mos6502Label err_prob, Mos6502Label async_cmd, Mos6502Label comm_continue, Mos6502Label mod_buf,
@@ -799,28 +816,28 @@ internal class SpinFireDriveCode
             .Append((byte)(17 | 0x40))
             // These are modified when the disk image is created.
             .AppendBytes(3, 0)
-            .Append(0) // No regular units
-            .Label(out var sideid)
+            .Append(0); // No regular units
+        asm.Label(out var sideid)
             // Knock code for this disk side.
             // Putting the branch offsets here is a kludge to bring them
             // to disk.c so they can be included in the gcr table.
-            .Append(0).Append(BNE_WITH_NOP.LowByte()).Append(BNE_WITHOUT_NOP.LowByte())
+            .Append(0).Append(BNE_WITH_NOP.LowByte()).Append(BNE_WITHOUT_NOP.LowByte());
 
-            .Label(err_prob)
-            .Append(0) // Error probability
+        asm.Label(err_prob)
+            .Append(0); // Error probability
 
-            .Label(out var prof_comm)
+        asm.Label(out var prof_comm);
 
-            .Label(out var nodatarequest)
+        asm.Label(out var nodatarequest)
             .BEQ(out var reset)
 
-            .JMP(async_cmd)
+            .JMP(async_cmd);
 
-            .Label(reset)
+        asm.Label(reset)
             // Atn was released but no other line is held.
-            .JMP(_[0xfffc]) // System reset detected -- reset drive.
+            .JMP(_[0xfffc]); // System reset detected -- reset drive.
 
-            .Label(comm_continue)
+        asm.Label(comm_continue)
             .STY(temp)
             .TYA()
             .CLC()
@@ -836,17 +853,17 @@ internal class SpinFireDriveCode
             // Wait for the host to pull clock before we
             // can transmit a postponed unit.
 
-            .LDA_Imm(4)
-            .Label(out var waitclk)
+            .LDA_Imm(4);
+        asm.Label(out var waitclk)
             .BIT(0x1800)
             .BEQ(waitclk)
 
             .CPX(chunklen) // is it a chain head?
             .BNE(out var nochain)
 
-            .LDX_Imm(0xa) // MORE + force chain
+            .LDX_Imm(0xa); // MORE + force chain
 
-            .Label(nochain)
+        asm.Label(nochain)
             // y points to last byte of unit
 
             .LDA(1, Y) // more postponed units to follow?
@@ -856,9 +873,9 @@ internal class SpinFireDriveCode
             .BPL(notlast)
 
             .DEX() // turn off MORE, keep force-chain bit
-            .DEX()
+            .DEX();
 
-            .Label(notlast)
+        asm.Label(notlast)
             .LDA(nextstatus) // bit 1 set if the old job continues
             .STX(nextstatus)
 
@@ -869,12 +886,12 @@ internal class SpinFireDriveCode
             // If the host doesn't pull clock within one second,
             // we'll turn off the motor (and LED).
 
-            .TAX() // x = 0
-            .Label(out var outermotor)
+            .TAX(); // x = 0
+        asm.Label(out var outermotor)
             .LDA_Imm(0x9e)
             .STA(0x1805)
-            .LDA_Imm(4)
-            .Label(out var innermotor)
+            .LDA_Imm(4);
+        asm.Label(out var innermotor)
             .BIT(0x1800)
             .BNE(keepmotor)
 
@@ -888,9 +905,9 @@ internal class SpinFireDriveCode
             .AND_Imm(0xf3)
             .STA(0x1c00)
             .LDA_Imm(SAFETY_MARGIN)
-            .STA(safety)
+            .STA(safety);
 
-            .Label(keepmotor)
+        asm.Label(keepmotor)
             // Was atn released prematurely? Then reset.
 
             .LDA(0x1800)
@@ -900,9 +917,9 @@ internal class SpinFireDriveCode
             .STA(0x1800) // release BUSY (data)
 
             .BIT(0x1800)
-            .BMI(-5) // wait for atn to be released
+            .BMI(-5); // wait for atn to be released
 
-            .Label(out var prof_send)
+        asm.Label(out var prof_send)
             .LDX_Imm(0)
             .STX(0x1800) // prepare to read data/clock lines
             .LDY(temp)
@@ -923,18 +940,18 @@ internal class SpinFireDriveCode
 
             // In this case, we know the motor is already running.
 
-            .BNE(out var motorok) // always
+            .BNE(out var motorok); // always
 
-            .Label(readyforchain)
+        asm.Label(readyforchain)
 
             // This could be the first transfer of a new job.
             // Warm up the motor for the next block.
 
             .LDA(0x1c00)
             .ORA_Imm(4)
-            .STA(0x1c00)
+            .STA(0x1c00);
 
-            .Label(motorok)
+        asm.Label(motorok)
 
             // Send chunkprefix, then from y+1 to chunkend inclusive, then nextstatus.
 
@@ -942,12 +959,12 @@ internal class SpinFireDriveCode
 
             .LAX(chunkprefix)
             .AND_Imm(0x0f)
-            .BPL(out var sendentry)
+            .BPL(out var sendentry);
 
             // Writes to $1800 must happen 13 cycles after atn changed, worst case.
             // Atn can change 4 cycles after writing to $1800, worst case.
             // This allows up to 7 cycles between each check+write idiom.
-            .Label(out var sendloop)
+        asm.Label(out var sendloop)
             .ALR_Imm(0xf0)
 
             .BIT(0x1800)
@@ -960,16 +977,16 @@ internal class SpinFireDriveCode
 
             .BIT(0x1800)
             .BPL(-5)
-            .STA(0x1800) // 000ab000 (a gets inverted due to atna)
+            .STA(0x1800); // 000ab000 (a gets inverted due to atna)
 
-            .Label(mod_buf)
+        asm.Label(mod_buf)
             .LAX(0x100, Y)
             .AND_Imm(0x0f)
 
             .BIT(0x1800)
-            .BMI(-5)
+            .BMI(-5);
 
-            .Label(sendentry)
+        asm.Label(sendentry)
             .STA(0x1800) // 0000e-g-
             .ASL()
             .ORA_Imm(0x10)
@@ -1005,14 +1022,14 @@ internal class SpinFireDriveCode
             .STA(0x1800) // pull data (BUSY), release the clock line
 
             .INY()
-            .BEQ(out var nomoreunits)
+            .BEQ(out var nomoreunits);
 
-            .Label(checkunit)
+        asm.Label(checkunit)
             .LDA(_[bufptr], Y)
             .BEQ(nomoreunits)
-            .JMP(nextunit)
+            .JMP(nextunit);
 
-            .Label(nomoreunits)
+        asm.Label(nomoreunits)
             .JMP(drivecode_fetch);
 
         asm.AppendBytes(256 - asm.CurrentOffset, 0xdd);
@@ -1021,7 +1038,9 @@ internal class SpinFireDriveCode
     private static void AssembleFlipDiskEnd(ushort address, Mos6510Assembler asm, Mos6502Label mod_fetchret, Mos6502Label transfer, Mos6502Label fetch_return)
     {
         asm.Org(address)
-            .Append(5) // sector number
+            .Append(5); // sector number
+
+        asm.Label(out var ondemand_entry)
 
             // We have transmitted the chain heads for the last job on the
             // old disk, and the host has returned from the last regular
@@ -1034,9 +1053,9 @@ internal class SpinFireDriveCode
             .LDA_Imm(flip_fetchret.HighByte())
             .STA(mod_fetchret + 2)
             .LDA_Imm(0x04)
-            .STA(ledmask)
+            .STA(ledmask);
 
-            .Label(out var badflip)
+        asm.Label(out var badflip)
             // Replace the buffer with instructions to transfer a do-nothing
             // unit and then read sector 17 (with the initial continuation
             // record).
@@ -1049,18 +1068,18 @@ internal class SpinFireDriveCode
             // sector 17 again, until the knock codes match or the host
             // intervenes with a command or system reset.
 
-            .LDY_Imm(10)
-            .Label(out var copyretry)
+            .LDY_Imm(10);
+        asm.Label(out var copyretry)
             .LDA(out var retrysector, Y)
             .STA(0x100, Y)
             .DEY()
             .BPL(copyretry)
-            .JMP(transfer)
+            .JMP(transfer);
 
-            .Label(flip_fetchret)
+        asm.Label(flip_fetchret)
             // Do the knock codes match?
-            .LDX_Imm(2)
-            .Label(out var flipcheck)
+            .LDX_Imm(2);
+        asm.Label(out var flipcheck)
             .LDA(0x105, X)
             .CMP(out var nextsideid, X)
             .BNE(badflip)
@@ -1090,15 +1109,16 @@ internal class SpinFireDriveCode
 
             .JMP(transfer)
 
-            .AppendBytes(256 - 14 - asm.CurrentOffset, 0xee)
+            .AppendBytes(256 - 14 - asm.CurrentOffset, 0xee);
 
-            .Label(retrysector)
+        asm.Label(retrysector)
             .Append(0x40) // Continuation record indicator
             .AppendBuffer([8, 0, 0]) // Continue with sector 17
             .AppendBuffer([5, 0, 0xbf, 0, 0x8f, 0]) // Dummy data unit(patched in disk.c)
-            .Append(0) // No more units
+            .Append(0); // No more units
 
-            .Label(nextsideid).AppendBytes(3, 0); // Patched
+        asm.Label(nextsideid)
+            .AppendBytes(3, 0); // Patched
     }
 
     private void AssembleAsynchronousCommand(ushort address, Mos6510Assembler asm, Mos6502Label mod_fetchret, Mos6502Label drivecode_fetch, Mos6502Label fetch_return, Mos6502Label transfer)
@@ -1109,9 +1129,9 @@ internal class SpinFireDriveCode
             .LDY_Imm(0)
             .LDA_Imm(2)
             .STA(temp)
-            .ASL() // a = 4 for bit-check
+            .ASL(); // a = 4 for bit-check
 
-            .Label(out var bitloop)
+        asm.Label(out var bitloop)
             .BIT(0x1800)
             .BPL(out var async_reset) // system reset detected
             .LDX_Imm(0x10)
@@ -1128,9 +1148,9 @@ internal class SpinFireDriveCode
             .BIT(0x1800)
             .BEQ(out var got0)
 
-            .SEC()
+            .SEC();
 
-            .Label(got0)
+        asm.Label(got0)
             .STX(0x1800) // pull data
 
             .BIT(0x1800) // wait for atn to be pulled
@@ -1140,8 +1160,7 @@ internal class SpinFireDriveCode
             .BCC(bitloop)
 
             // At this point, the host returns from the seek call.
-
-
+            
             .LDY(temp)
             .LDA(out var seektrack, Y)
             .STA(req_track)
@@ -1156,12 +1175,12 @@ internal class SpinFireDriveCode
             .STA(mod_fetchret + 1)
             .LDA_Imm(seek_fetchret.HighByte())
             .STA(mod_fetchret + 2)
-            .JMP(drivecode_fetch)
+            .JMP(drivecode_fetch);
 
-            .Label(async_reset)
-            .JMP(_[0xfffc])
+        asm.Label(async_reset)
+            .JMP(_[0xfffc]);
 
-            .Label(seek_fetchret)
+        asm.Label(seek_fetchret)
             // We have the desired continuation record on the stack.
             // Cut off any further units in the same sector.
             .LDA_Imm(0x40)
@@ -1179,9 +1198,9 @@ internal class SpinFireDriveCode
             .BCS(out var notfirst)
 
             .LDA_Imm(1 * 2)
-            .STA(req_track)
+            .STA(req_track);
 
-            .Label(notfirst)
+        asm.Label(notfirst)
             .LSR(0x103)
 
             .LDA_Imm(fetch_return.LowByte())
@@ -1197,9 +1216,11 @@ internal class SpinFireDriveCode
             // unit is transferred.
             // Then we will go and prefetch some interesting sectors.
 
-            .AppendBytes(0x80 - asm.CurrentOffset, 0xff)
+            .AppendBytes(0x80 - asm.CurrentOffset, 0xff);
 
-            .Label(seektrack).AppendBytes(64, 0)
-            .Label(seeksector).AppendBytes(64, 0);
+        asm.Label(seektrack)
+            .AppendBytes(64, 0);
+        asm.Label(seeksector)
+            .AppendBytes(64, 0);
     }
 }
