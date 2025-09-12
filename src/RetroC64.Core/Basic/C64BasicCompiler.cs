@@ -6,6 +6,8 @@ using System.Buffers;
 
 namespace RetroC64.Basic;
 
+using static C64CharSet;
+
 /// <summary>
 /// Compiles Commodore 64 BASIC source code into its tokenized binary representation.
 /// </summary>
@@ -260,11 +262,11 @@ public class C64BasicCompiler : IDisposable
 
     private void WriteChar(char c)
     {
-        WriteByte(CharToPetsciiBasic((c)));
+        WriteByte(CharToBasicPETSCII((c)));
     }
 
     // Undefined character in PETSCII, replace with 0xFF
-    private static byte CharToPetsciiBasic(char c) => c < 0x80 ? C64Petscii.ToByte(c) : (byte)0xFF;
+    private static byte CharToBasicPETSCII(char c) => c < 0x80 ? CharToPETSCII(c) : (byte)0xFF;
 
     private void WriteUShort(ushort value)
     {

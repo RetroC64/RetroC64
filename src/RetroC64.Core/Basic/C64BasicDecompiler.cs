@@ -6,6 +6,8 @@ using System.Text;
 
 namespace RetroC64.Basic;
 
+using static C64CharSet;
+
 /// <summary>
 /// Represents a decompiled C64 BASIC program, including its source code and start address.
 /// </summary>
@@ -85,12 +87,12 @@ public static class C64BasicDecompiler
             if (b == '"' && !inRem)
             {
                 inString = !inString;
-                stringBuilder.Append(C64Petscii.ToChar(b));
+                stringBuilder.Append(PETSCIIToChar(b));
             }
             else if (inString || inRem)
             {
                 // If we're inside a string or REM comment, write bytes as-is
-                stringBuilder.Append(C64Petscii.ToChar(b));
+                stringBuilder.Append(PETSCIIToChar(b));
             }
             else
             {
@@ -110,7 +112,7 @@ public static class C64BasicDecompiler
                 else
                 {
                     // Not a token, write as character
-                    stringBuilder.Append(C64Petscii.ToChar(b));
+                    stringBuilder.Append(PETSCIIToChar(b));
                 }
             }
         }

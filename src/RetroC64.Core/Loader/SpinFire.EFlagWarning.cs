@@ -38,9 +38,9 @@ internal partial class SpinFire
 
         asm.Label(message)
             .AppendBytes(40, 0x43)
-            .AppendBuffer(C64Petscii.ToScreenCode("this version was built with the -e flag!".ToUpperInvariant()))
-            .AppendBuffer(C64Petscii.ToScreenCode("the drivecode will inject random read   ".ToUpperInvariant()))
-            .AppendBuffer(C64Petscii.ToScreenCode("errors to cause delays.                 ".ToUpperInvariant()))
+            .AppendBuffer(C64CharSet.StringToPETScreenCode("this version was built with the -e flag!".ToUpperInvariant()))
+            .AppendBuffer(C64CharSet.StringToPETScreenCode("the drivecode will inject random read   ".ToUpperInvariant()))
+            .AppendBuffer(C64CharSet.StringToPETScreenCode("errors to cause delays.                 ".ToUpperInvariant()))
             .AppendBytes(40, 0x43);
 
         asm.End();

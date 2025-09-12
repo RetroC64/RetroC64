@@ -15,7 +15,7 @@ namespace RetroC64;
 /// <remarks>This class includes methods to map Unicode characters to their PETSCII byte equivalents and vice
 /// versa. PETSCII is a character encoding used in Commodore 64 systems, and this class facilitates interoperability
 /// between modern Unicode-based systems and PETSCII-based systems.</remarks>
-public static class C64Petscii
+public static class C64CharSet
 {
     /// <summary>
     /// Converts the specified Unicode character to its corresponding PETSCII byte value.
@@ -23,7 +23,7 @@ public static class C64Petscii
     /// <param name="ch">The Unicode character to convert.</param>
     /// <returns>The PETSCII byte value corresponding to the specified character if it is within the PETSCII range;  otherwise,
     /// <c>0xFF</c> to indicate an invalid or unsupported character.</returns>
-    public static byte ToByte(char ch) =>
+    public static byte CharToPETSCII(char ch) =>
         // If character is not in PETSCII range, return 0xFF (invalid)
         UnicodeToPetscii.GetValueOrDefault(ch, (byte)0xFF);
 
@@ -33,15 +33,15 @@ public static class C64Petscii
     /// <param name="b">The PETSCII byte value to convert. Must be within the valid range of the character mapping.</param>
     /// <param name="shifted">A boolean indicating whether to use the shifted character mapping. Defaults to <c>false</c>.</param>
     /// <returns>The character corresponding to the specified byte value.</returns>
-    public static char ToChar(byte b, bool shifted = false) => Unsafe.Add(ref MemoryMarshal.GetReference(shifted ? Shifted: Unshifted), b);
+    public static char PETSCIIToChar(byte b, bool shifted = false) => Unsafe.Add(ref MemoryMarshal.GetReference(shifted ? Shifted: Unshifted), b);
     
-    public static byte[] ToScreenCode(string text)
+    public static byte[] StringToPETScreenCode(string text)
     {
-        var buffer = ToBytes(text);
-        return PetsciiToScreenCode(buffer);
+        var buffer = StringToPETSCII(text);
+        return PETSCIIToPETScreenCode(buffer);
     }
 
-    public static byte[] PetsciiToScreenCode(ReadOnlySpan<byte> buffer)
+    public static byte[] PETSCIIToPETScreenCode(ReadOnlySpan<byte> buffer)
     {
         // From https://sta.c64.org/cbm64pettoscr.html
         var dest = new byte[buffer.Length];
@@ -60,12 +60,12 @@ public static class C64Petscii
         return dest;
     }
     
-    public static byte[] ToBytes(string str)
+    public static byte[] StringToPETSCII(string str)
     {
         var buffer = new List<byte>();
         foreach (var c in str)
         {
-            buffer.Add(ToByte(c));
+            buffer.Add(CharToPETSCII(c));
         }
         return buffer.ToArray();
     }
