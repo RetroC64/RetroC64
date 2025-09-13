@@ -21,7 +21,7 @@ public static class C64Tester
         basicCompiler.Reset();
         var basicBuffer = basicCompiler.Compile($"0SYS{startAsm}");
 
-        using var asm = new Mos6502Assembler((ushort)startAsm);
+        using var asm = new Mos6510Assembler((ushort)startAsm);
 
         asm
             .SEI()

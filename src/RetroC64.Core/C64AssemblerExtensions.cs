@@ -22,25 +22,29 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static Mos6502Assembler LDA_Imm<TEnum>(this Mos6502Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDA_Imm(Unsafe.As<TEnum, byte>(ref value));
+    public static Mos6510Assembler  LDA_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDA_Imm(Unsafe.As<TEnum, byte>(ref value));
+
+    public static Mos6510Assembler  LDX_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDX_Imm(Unsafe.As<TEnum, byte>(ref value));
+
+    public static Mos6510Assembler  LDY_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDY_Imm(Unsafe.As<TEnum, byte>(ref value));
 
     /// <summary>
     /// Logical AND. AND instruction (0x29) with addressing mode Immediate with an enum value.
     /// </summary>
     /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
-    public static Mos6502Assembler AND_Imm<TEnum>(this Mos6502Assembler asm, TEnum value) where TEnum : struct, Enum => asm.AND_Imm(Unsafe.As<TEnum, byte>(ref value));
+    public static Mos6510Assembler  AND_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.AND_Imm(Unsafe.As<TEnum, byte>(ref value));
 
     /// <summary>
     /// Logical Inclusive OR. ORA instruction (0x09) with addressing mode Immediate.
     /// </summary>
     /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
-    public static Mos6502Assembler ORA_Imm<TEnum>(this Mos6502Assembler asm, TEnum value) where TEnum : struct, Enum => asm.ORA_Imm(Unsafe.As<TEnum, byte>(ref value));
+    public static Mos6510Assembler  ORA_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.ORA_Imm(Unsafe.As<TEnum, byte>(ref value));
 
     /// <summary>
     /// Logical Exclusive OR (XOR). EOR instruction (0x49) with addressing mode Immediate.
     /// </summary>
     /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
-    public static Mos6502Assembler EOR_Imm<TEnum>(this Mos6502Assembler asm, TEnum value) where TEnum : struct, Enum => asm.EOR_Imm(Unsafe.As<TEnum, byte>(ref value));
+    public static Mos6510Assembler  EOR_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.EOR_Imm(Unsafe.As<TEnum, byte>(ref value));
 
     /// <summary>
     /// Sets up the stack pointer to $ff, which is the top of the C64 stack.
@@ -50,7 +54,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the stack and X register.
     /// </remarks>
-    public static Mos6502Assembler SetupStack(this Mos6502Assembler asm)
+    public static Mos6510Assembler  SetupStack(this Mos6510Assembler  asm)
         => asm
             .LDX_Imm(0xff)
             .TXS();
@@ -63,7 +67,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static Mos6502Assembler SetupFullRamAccess(this Mos6502Assembler asm)
+    public static Mos6510Assembler  SetupFullRamAccess(this Mos6510Assembler  asm)
         => asm
             .LDA_Imm(CPUPortFlags.FullRam)
             .STA(C64_CPU_PORT); // Store in $01, which is the RAM setup register for C64
@@ -76,7 +80,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static Mos6502Assembler DisableAllIrq(this Mos6502Assembler asm)
+    public static Mos6510Assembler  DisableAllIrq(this Mos6510Assembler  asm)
         => asm
             .LDA_Imm(CIAInterruptFlags.ClearAllInterrupts)
             .STA(CIA1_INTERRUPT_CONTROL) // CIA1 IRQs
@@ -95,7 +99,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifiers the A and X registers.
     /// </remarks>
-    public static Mos6502Assembler ClearMemoryBy256BytesBlock(this Mos6502Assembler asm, ushort address, ushort count, byte value = 0)
+    public static Mos6510Assembler  ClearMemoryBy256BytesBlock(this Mos6510Assembler  asm, ushort address, ushort count, byte value = 0)
     {
         if (count == 0) return asm;
 
@@ -124,7 +128,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the stack and the A register.
     /// </remarks>
-    public static Mos6502Assembler PushAllRegisters(this Mos6502Assembler asm)
+    public static Mos6510Assembler  PushAllRegisters(this Mos6510Assembler  asm)
         => asm
             .PHA() // Push accumulator
             .TXA() // Transfer X to A
@@ -140,7 +144,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the stack, the A register, the X register, and the Y register.
     /// </remarks>
-    public static Mos6502Assembler PopAllRegisters(this Mos6502Assembler asm)
+    public static Mos6510Assembler  PopAllRegisters(this Mos6510Assembler  asm)
         => asm
             .PLA() // Pull Y
             .TAY() // Transfer A to Y
@@ -148,7 +152,7 @@ public static class C64AssemblerExtensions
             .TAX() // Transfer A to X
             .PLA(); // Pull accumulator
 
-    public static Mos6502Assembler StoreLabelAtAddress(this Mos6502Assembler asm, Mos6502Label label, ushort address)
+    public static Mos6510Assembler  StoreLabelAtAddress(this Mos6510Assembler  asm, Mos6502Label label, ushort address)
     {
         return asm
             .LDA_Imm(label.LowByte()) // Load the low byte of the address
@@ -162,7 +166,7 @@ public static class C64AssemblerExtensions
     /// </summary>
     /// <param name="asm">The assembler instance.</param>
     /// <returns>The assembler instance for chaining.</returns>
-    public static Mos6502Assembler InfiniteLoop(this Mos6502Assembler asm)
+    public static Mos6510Assembler  InfiniteLoop(this Mos6510Assembler  asm)
         => asm
             .Label("infiniteLoop", out var label)
             .JMP(label);
@@ -177,7 +181,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// <para>Modifies the A register</para>
     /// </remarks>
-    public static Mos6502Assembler SetupRasterIrq(this Mos6502Assembler asm, Mos6502Label rasterHandler, byte rasterLine = 0)
+    public static Mos6510Assembler  SetupRasterIrq(this Mos6510Assembler  asm, Mos6502Label rasterHandler, byte rasterLine = 0)
     {
         return asm
             .LDA_Imm(rasterLine) // Load 0 into the A register
@@ -203,7 +207,7 @@ public static class C64AssemblerExtensions
     /// <para>Inspired by <a href="https://codebase64.pokefinder.org/doku.php?id=base:nmi_lock">codebase64 / nmi_lock</a></para>
     /// <para>Modifies the A register</para>
     /// </remarks>
-    public static Mos6502Assembler DisableNmi(this Mos6502Assembler asm)
+    public static Mos6510Assembler  DisableNmi(this Mos6510Assembler  asm)
         => asm
             .LabelForward("nmiHandler", out var nmiHandler)
             .StoreLabelAtAddress(nmiHandler, NMI_VECTOR) // Store the NMI handler address at the NMI vector
@@ -238,7 +242,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// This code must be set between a pair of SEI/CLI instructions to avoid interrupts during the timing-sensitive operation.
     /// </remarks>
-    public static Mos6502Assembler SetupTimeOfDayAndGetVerticalFrequency(this Mos6502Assembler asm)
+    public static Mos6510Assembler  SetupTimeOfDayAndGetVerticalFrequency(this Mos6510Assembler  asm)
     {
         // From https://codebase64.pokefinder.org/doku.php?id=cia:efficient_tod_initialisation
         // Credits to Silver Dream ! / Thorgal / W.F.M.H.
