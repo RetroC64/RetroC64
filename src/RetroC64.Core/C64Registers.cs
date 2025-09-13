@@ -578,8 +578,34 @@ public static class C64Registers
     /// Bit 5: Serial DATA OUT.
     /// Bit 6: Serial CLOCK IN.
     /// Bit 7: Serial DATA IN.
+    /// See <see cref="CIAPortAFlags"/>.
     /// </summary>
     public const ushort CIA2_PORT_A = 0xDD00;
+
+    /// <summary>
+    /// The flags for controlling and reading the state of CIA2 Port A.
+    /// </summary>
+    [Flags]
+    public enum CIAPortAFlags : byte
+    {
+        /// <summary>Bit 0: VIC bank select bit 0.</summary>
+        VIC_BANK_0 = 1 << 0,
+        /// <summary>Bit 1: VIC bank select bit 1.</summary>
+        VIC_BANK_1 = 1 << 1,
+        /// <summary>Bit 2: RS232 TXD.</summary>
+        RS232_TXD = 1 << 2,
+        /// <summary>Bit 3: Serial ATN OUT. NotSet = High, Set = Low.</summary>
+        SERIAL_ATN_OUT = 1 << 3,
+        /// <summary>Bit 4: Serial CLOCK OUT. NotSet = High, Set = Low.</summary>
+        SERIAL_CLOCK_OUT = 1 << 4,
+        /// <summary>Bit 5: Serial DATA OUT. NotSet = High, Set = Low.</summary>
+        SERIAL_DATA_OUT = 1 << 5,
+        /// <summary>Bit 6: Serial CLOCK IN. NotSet = Low, Set = High.</summary>
+        SERIAL_CLOCK_IN = 1 << 6,
+        /// <summary>Bit 7: Serial DATA IN. NotSet = Low, Set = High.</summary>
+        SERIAL_DATA_IN = 1 << 7,
+    }
+
     /// <summary>
     /// Port B, RS232 access.
     /// Read: Bit 0=RXD, 3=RI, 4=DCD, 5=User port H, 6=CTS, 7=DSR.
