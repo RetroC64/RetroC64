@@ -10,9 +10,12 @@
 using AsmMos6502;
 using AsmMos6502.Expressions;
 using static AsmMos6502.Mos6502Factory;
+
 // ReSharper disable IdentifierTypo
 
 namespace RetroC64.Loader;
+
+using static C1541Registers;
 
 /// <summary>
 /// C# translation of drivecode.s for the 1541, using Mos6510Assembler.
@@ -140,8 +143,8 @@ internal partial class SpinFire
 
             .SEI()
 
-            .LDA_Imm(0x02)
-            .STA(0x1800); // Indicate busy
+            .LDA_Imm(VIA1PortB.DataOut)
+            .STA(VIA1_PORT_B); // Indicate busy
         
         // Clear all zeropage variables
         asm
@@ -155,18 +158,18 @@ internal partial class SpinFire
         asm
             // Read mode, SO enabled
             .LDA_Imm(0xee)
-            .STA(0x1c0c)
+            .STA(VIA2_AUX_CONTROL)
 
             // ldx #0
-            .STX(0x1c04) // latch, low byte
+            .STX(VIA2_TIMER_LOW) // latch, low byte
             .LDA_Imm(0x7f) // disable interrupts
-            .STA(0x1c0e)
-            .STA(0x1c0d)
+            .STA(VIA2_INTERRUPT_CONTROL)
+            .STA(VIA2_INTERRUPT_STATUS)
             .LDA_Imm(0xc0) // enable timer 1 interrupt
-            .STA(0x1c0e)
+            .STA(VIA2_INTERRUPT_CONTROL)
             .INX()
-            .STX(0x1c0b) // timer 1 one-shot, latch port a
-            .STX(0x1c05) // quick first timeout
+            .STX(VIA2_TIMER_CONTROL) // timer 1 one-shot, latch port a
+            .STX(VIA2_TIMER_HIGH) // quick first timeout
 
             // Copy zp code into place
             .LabelForward(out var zpcodeblock_begin)
@@ -185,10 +188,10 @@ internal partial class SpinFire
             // Load the communication code using the newly installed drivecode.
             .LDA_Imm(0x0c)
             .STA(ledmask)
-            .LDA(0x1c00)
+            .LDA(VIA2_PORT_B)
             .AND_Imm(0x03)
             .ORA_Imm(0x4c) // led and motor on, bitrate for track 18
-            .STA(0x1c00)
+            .STA(VIA2_PORT_B)
 
             .LDA_Imm(19)
             .STA(tracklength)
@@ -205,7 +208,7 @@ internal partial class SpinFire
             .LDA_Imm(6)
             .STA(ondemand_dest + 2)
             .Label(out var ll)
-            .BIT(0x1800) // Wait until the host is up (atn held)
+            .BIT(VIA1_PORT_B) // Wait until the host is up (atn held)
             .BPL(ll)
 
             // Initialisation complete.
@@ -243,7 +246,7 @@ internal partial class SpinFire
             // bitrate.
             .NOP()
             .Label(out var zpc_loop_without_nop)
-            .LAX(0x1c01) // lax1c01
+            .LAX(VIA2_PORT_A) // lax1c01
             .ARR_Imm(0xf0) // arr imm, ddddd000
             .CLV()
             .TAY();
@@ -259,7 +262,7 @@ internal partial class SpinFire
             .LDA_Imm(0x0f)
             .LabelForward(out var zpc_mod5)
             .SAX((zpc_mod5 + 1).LowByte())
-            .LDA(0x1c01)
+            .LDA(VIA2_PORT_A)
             .LDX_Imm(3)
             .LabelForward(out var zpc_mod7)
             .SAX((zpc_mod7 + 1).LowByte())
@@ -270,7 +273,7 @@ internal partial class SpinFire
             .LDA(gcrdecode, X)
             .EOR(gcrdecode + 0x40, Y)
             .PHA()
-            .LAX(0x1c01)
+            .LAX(VIA2_PORT_A)
             .CLV()
             .AND_Imm(0x1f)
             .TAY()
@@ -287,7 +290,7 @@ internal partial class SpinFire
 
             // start of a new 5-byte chunk
 
-            .LDA(0x1c01)
+            .LDA(VIA2_PORT_A)
             .LDX_Imm(0xf8)
             .LabelForward(out var zpc_mod1)
             .SAX((zpc_mod1 + 1).LowByte())
@@ -295,7 +298,7 @@ internal partial class SpinFire
             .ORA_Imm(0x08)
             .TAY()
 
-            .LDA(0x1c01)
+            .LDA(VIA2_PORT_A)
             .LDX_Imm(0xc0)
             .LabelForward(out var zpc_mod2)
             .SAX((zpc_mod2 + 1).LowByte())
@@ -315,7 +318,7 @@ internal partial class SpinFire
         asm
             .BNE(zpc_loop_without_nop)
             .LDX((zpc_mod3 + 1).LowByte())
-            .LDA(0x1c01)
+            .LDA(VIA2_PORT_A)
             .JMP(zp_return)
             .Label(zpcodeblock_end);
 
@@ -435,8 +438,8 @@ internal partial class SpinFire
             .LDA(interested + 2, X)
             .BNE(out var dostash)
 
-            .LDA_Imm(0x04)
-            .AND(0x1800)
+            .LDA_Imm(VIA1PortB.ClockIn)
+            .AND(VIA1_PORT_B)
             .BNE(dontstash);
 
         asm.Label(dostash)
@@ -465,9 +468,9 @@ internal partial class SpinFire
         asm.Label(transfer)
             // Turn off LED.
 
-            .LDA(0x1c00)
+            .LDA(VIA2_PORT_B)
             .AND_Imm(0x77)
-            .STA(0x1c00)
+            .STA(VIA2_PORT_B)
 
             .LDA_Imm(1);
         asm.Label(transferbuf)
@@ -555,7 +558,7 @@ internal partial class SpinFire
             // Pull data to indicate busy.
             // 33 cycles after atn edge, worst case.
 
-            .STA(0x1800)
+            .STA(VIA1_PORT_B)
 
             // Incoming asynchronous command. Clear pending work.
 
@@ -590,10 +593,10 @@ internal partial class SpinFire
         asm.Org(address)
             .Label(drivecode_fetch);
         asm.Label(out var wait)
-            .BIT(0x1c0d) // Wait for previous step to settle
+            .BIT(VIA2_INTERRUPT_STATUS) // Wait for previous step to settle
             .BPL(wait)
 
-            .LDA(0x1c00)
+            .LDA(VIA2_PORT_B)
             .LDX(req_track)
             .CPX(currtrack)
             .BEQ(out var fetch_here)
@@ -630,10 +633,10 @@ internal partial class SpinFire
             .STX(tracklength)
 
             .ORA(zonebits, Y) // also turn on motor and LED
-            .STA(0x1c00)
+            .STA(VIA2_PORT_B)
 
             .LDY_Imm(0x19)
-            .STY(0x1c05); // write latch & counter, clear int
+            .STY(VIA2_TIMER_HIGH); // write latch & counter, clear int
 
         asm.Label(out var nosectors)
             .JMP(nothing_fetched);
@@ -642,7 +645,7 @@ internal partial class SpinFire
             .LDX(ninterested)
             .BEQ(nosectors)
             .ORA(ledmask) // turn on motor and usually LED
-            .STA(0x1c00);
+            .STA(VIA2_PORT_B);
 
         asm.Label(out var fetchblock)
             .LDX_Imm((byte)Mos6510OpCode.BEQ_Relative)
@@ -661,32 +664,32 @@ internal partial class SpinFire
             .TXS();
 
         asm.Label(out var waitsync)
-            .BIT(0x1c00)
+            .BIT(VIA2_PORT_B)
             .BPL(waitsync)
 
             .Label(out var waitsync2)
-            .BIT(0x1c00)
+            .BIT(VIA2_PORT_B)
             .BMI(waitsync2)
 
-            .LDA(0x1c01) // ack the sync byte
+            .LDA(VIA2_PORT_A) // ack the sync byte
             .CLV()
 
             .BVC(-2)
 
-            .LDA(0x1c01) // aaaaabbb, which is 01010.010(01) for a header
+            .LDA(VIA2_PORT_A) // aaaaabbb, which is 01010.010(01) for a header
             .CLV()
             .EOR_Imm(0x55)
             .BNE(waitsync)
 
             .BVC(-2)
-            .LDA(0x1c01) // bbcccccd
+            .LDA(VIA2_PORT_A) // bbcccccd
             .CLV()
             .ALR_Imm(0x3f)
             .LabelForward(out var first_mod3)
             .STA(first_mod3 + 1)
 
             .BVC(-2)
-            .LAX(0x1c01) // ddddeeee
+            .LAX(VIA2_PORT_A) // ddddeeee
             .ARR_Imm(0xf0) // ddddd000
             .CLV()
             .TAY();
@@ -794,8 +797,8 @@ internal partial class SpinFire
             .BEQ(fetchblock0)
 
             // ...and the host has nothing better to do...
-            .LDA_Imm(4)
-            .BIT(0x1800)
+            .LDA_Imm(VIA1PortB.ClockIn)
+            .BIT(VIA1_PORT_B)
             .BEQ(fetchblock0)
 
             // ...then now is a good time to transmit it.
@@ -853,9 +856,9 @@ internal partial class SpinFire
             // Wait for the host to pull clock before we
             // can transmit a postponed unit.
 
-            .LDA_Imm(4);
+            .LDA_Imm(VIA1PortB.ClockIn);
         asm.Label(out var waitclk)
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BEQ(waitclk)
 
             .CPX(chunklen) // is it a chain head?
@@ -889,42 +892,42 @@ internal partial class SpinFire
             .TAX(); // x = 0
         asm.Label(out var outermotor)
             .LDA_Imm(0x9e)
-            .STA(0x1805)
+            .STA(VIA1_TIMER_HIGH)
             .LDA_Imm(4);
         asm.Label(out var innermotor)
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BNE(keepmotor)
 
-            .BIT(0x1805)
+            .BIT(VIA1_TIMER_HIGH)
             .BMI(innermotor)
 
             .INX()
             .BPL(outermotor)
 
-            .LDA(0x1c00)
-            .AND_Imm(0xf3)
-            .STA(0x1c00)
+            .LDA(VIA2_PORT_B)
+            .AND_Imm(VIA2PortB.StepDirectionMask | VIA2PortB.WriteProtect | VIA2PortB.DensityMask | VIA2PortB.Sync)
+            .STA(VIA2_PORT_B)
             .LDA_Imm(SAFETY_MARGIN)
             .STA(safety);
 
         asm.Label(keepmotor)
             // Was atn released prematurely? Then reset.
 
-            .LDA(0x1800)
+            .LDA(VIA1_PORT_B)
             .BPL(reset)
 
-            .LDA_Imm(0x10)
-            .STA(0x1800) // release BUSY (data)
+            .LDA_Imm(VIA2PortB.WriteProtect)
+            .STA(VIA1_PORT_B) // release BUSY (data)
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BMI(-5); // wait for atn to be released
 
         asm.Label(out var prof_send)
             .LDX_Imm(0)
-            .STX(0x1800) // prepare to read data/clock lines
+            .STX(VIA1_PORT_B) // prepare to read data/clock lines
             .LDY(temp)
 
-            .LDA(0x1800)
+            .LDA(VIA1_PORT_B)
             .ALR_Imm(5)
             .BCC(nodatarequest)
 
@@ -947,9 +950,9 @@ internal partial class SpinFire
             // This could be the first transfer of a new job.
             // Warm up the motor for the next block.
 
-            .LDA(0x1c00)
+            .LDA(VIA2_PORT_B)
             .ORA_Imm(4)
-            .STA(0x1c00);
+            .STA(VIA2_PORT_B);
 
         asm.Label(motorok)
 
@@ -967,59 +970,59 @@ internal partial class SpinFire
         asm.Label(out var sendloop)
             .ALR_Imm(0xf0)
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BMI(-5)
-            .STA(0x1800) // 0--cd000
+            .STA(VIA1_PORT_B) // 0--cd000
 
             .LSR()
             .ALR_Imm(0xf0)
             .INY()
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BPL(-5)
-            .STA(0x1800); // 000ab000 (a gets inverted due to atna)
+            .STA(VIA1_PORT_B); // 000ab000 (a gets inverted due to atna)
 
         asm.Label(mod_buf)
             .LAX(0x100, Y)
             .AND_Imm(0x0f)
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BMI(-5);
 
         asm.Label(sendentry)
-            .STA(0x1800) // 0000e-g-
+            .STA(VIA1_PORT_B) // 0000e-g-
             .ASL()
             .ORA_Imm(0x10)
             .CPY(chunkend)
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BPL(-5)
-            .STA(0x1800) // 0001f-h0
+            .STA(VIA1_PORT_B) // 0001f-h0
             .TXA()
             .BCC(sendloop)
 
             .ALR_Imm(0xf0)
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BMI(-5)
-            .STA(0x1800) // 0--cd000 (final byte)
+            .STA(VIA1_PORT_B) // 0--cd000 (final byte)
 
             .LSR()
             .ALR_Imm(0xf0)
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BPL(-5)
-            .STA(0x1800) // 000ab000 (final byte, a gets inverted)
+            .STA(VIA1_PORT_B) // 000ab000 (final byte, a gets inverted)
 
             .LDA(nextstatus)
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BMI(-5)
-            .STA(0x1800) // send status bits
+            .STA(VIA1_PORT_B) // send status bits
 
             .LDA_Imm(2)
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BPL(-5)
-            .STA(0x1800) // pull data (BUSY), release the clock line
+            .STA(VIA1_PORT_B) // pull data (BUSY), release the clock line
 
             .INY()
             .BEQ(out var nomoreunits);
@@ -1132,28 +1135,28 @@ internal partial class SpinFire
             .ASL(); // a = 4 for bit-check
 
         asm.Label(out var bitloop)
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BPL(out var async_reset) // system reset detected
             .LDX_Imm(0x10)
-            .STX(0x1800) // release data
+            .STX(VIA1_PORT_B) // release data
 
-            .BIT(0x1800) // wait for atn to be released
+            .BIT(VIA1_PORT_B) // wait for atn to be released
             .BMI(-5)
 
-            .STY(0x1800) // get ready to read
+            .STY(VIA1_PORT_B) // get ready to read
             .BIT(0)
 
             .LDX_Imm(2)
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BEQ(out var got0)
 
             .SEC();
 
         asm.Label(got0)
-            .STX(0x1800) // pull data
+            .STX(VIA1_PORT_B) // pull data
 
-            .BIT(0x1800) // wait for atn to be pulled
+            .BIT(VIA1_PORT_B) // wait for atn to be pulled
             .BPL(-5)
 
             .ROL(temp)

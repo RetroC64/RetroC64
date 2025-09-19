@@ -21,13 +21,13 @@ internal partial class SpinFire
             .ORA_Imm(0x80) // A = 10ss_ssss
             .SEC()                  // C = 1
             .ROL()                  // A = 0sss_sss1, C = 1
-            .LDX_Imm(CIAPortAFlags.SERIAL_CLOCK_OUT | CIAPortAFlags.SERIAL_ATN_OUT);
+            .LDX_Imm(CIAPortAFlags.SerialClockOut | CIAPortAFlags.SerialAtnOut);
 
         asm.Label(out var spin_seek_bitloop)
             .STX(CIA2_PORT_A) // Pull clock and atn
 
             .BCC(out var wait_drive_ready)
-            .LDY_Imm(CIAPortAFlags.SERIAL_CLOCK_OUT); // Y becomes 00 or 10 according to bit
+            .LDY_Imm(CIAPortAFlags.SerialClockOut); // Y becomes 00 or 10 according to bit
 
         asm.Label(wait_drive_ready)
             .BIT(CIA2_PORT_A) // Wait for the drive to become ready (CIAPortAFlags.SERIAL_DATA_IN)
@@ -43,7 +43,7 @@ internal partial class SpinFire
             .ASL()
             .BNE(spin_seek_bitloop)
 
-            .LDX_Imm(CIAPortAFlags.SERIAL_ATN_OUT)
+            .LDX_Imm(CIAPortAFlags.SerialAtnOut)
             .STX(CIA2_PORT_A) // Release ATN and clock
 
             .RTS();

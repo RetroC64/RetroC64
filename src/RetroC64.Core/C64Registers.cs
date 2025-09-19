@@ -589,21 +589,21 @@ public static class C64Registers
     public enum CIAPortAFlags : byte
     {
         /// <summary>Bit 0: VIC bank select bit 0.</summary>
-        VIC_BANK_0 = 1 << 0,
+        VicBank0 = 1 << 0,
         /// <summary>Bit 1: VIC bank select bit 1.</summary>
-        VIC_BANK_1 = 1 << 1,
+        VicBank1 = 1 << 1,
         /// <summary>Bit 2: RS232 TXD.</summary>
-        RS232_TXD = 1 << 2,
-        /// <summary>Bit 3: Serial ATN OUT. NotSet = High, Set = Low.</summary>
-        SERIAL_ATN_OUT = 1 << 3,
-        /// <summary>Bit 4: Serial CLOCK OUT. NotSet = High, Set = Low.</summary>
-        SERIAL_CLOCK_OUT = 1 << 4,
-        /// <summary>Bit 5: Serial DATA OUT. NotSet = High, Set = Low.</summary>
-        SERIAL_DATA_OUT = 1 << 5,
-        /// <summary>Bit 6: Serial CLOCK IN. NotSet = Low, Set = High.</summary>
-        SERIAL_CLOCK_IN = 1 << 6,
-        /// <summary>Bit 7: Serial DATA IN. NotSet = Low, Set = High.</summary>
-        SERIAL_DATA_IN = 1 << 7,
+        RS232Txd = 1 << 2,
+        /// <summary>Bit 3: Serial ATN OUT. 0 = High, 1= Low.</summary>
+        SerialAtnOut = 1 << 3,
+        /// <summary>Bit 4: Serial CLOCK OUT. 0 = High, 1= Low.</summary>
+        SerialClockOut = 1 << 4,
+        /// <summary>Bit 5: Serial DATA OUT. 0 = High, 1= Low.</summary>
+        SerialDataOut = 1 << 5,
+        /// <summary>Bit 6: Serial CLOCK IN. 0 = Low, 1= High.</summary>
+        SerialClockIn = 1 << 6,
+        /// <summary>Bit 7: Serial DATA IN. 0 = Low, 1= High.</summary>
+        SerialDataIn = 1 << 7,
     }
 
     /// <summary>

@@ -10,6 +10,8 @@ using static AsmMos6502.Mos6502Factory;
 
 namespace RetroC64.Loader;
 
+using static C64Registers;
+
 internal partial class SpinFire
 {
     // org = 0x200
@@ -28,16 +30,16 @@ internal partial class SpinFire
 
         asm.Label(out var start)
             .LDA_Imm(0x7f)
-            .STA(0xdc0d)
+            .STA(CIA1_INTERRUPT_CONTROL)
 
             .SEI()
             .LDA_Imm(0x35)
             .STA(1)
 
             .LDA_Imm(0x00)
-            .STA(0xdd00)
+            .STA(CIA2_PORT_A)
             .LDA_Imm(0x3c)
-            .STA(0xdd02)
+            .STA(CIA2_DATA_DIRECTION_A)
 
             .JSR(out var earlysetup)
 
@@ -64,7 +66,7 @@ internal partial class SpinFire
             // player_time * 63 cycles
             // including jsr+rts and border effect
 
-            .DEC(0xd020)
+            .DEC(VIC2_BORDER_COLOR)
             .LDX(out var player_time)
             .DEX()
             .BEQ(out var skip);
@@ -89,7 +91,7 @@ internal partial class SpinFire
             .NOP()
             .NOP()
             .NOP()
-            .INC(0xd020);
+            .INC(VIC2_BORDER_COLOR);
 
         asm.Label(drv_rts)
             .RTS();
@@ -174,18 +176,18 @@ internal partial class SpinFire
             .ORA(0xfffe)
             .BEQ(out var mainloop)
 
-            .LSR(0xd019)
+            .LSR(VIC2_INTERRUPT)
             .CLI();
 
         asm.Label(mainloop)
             .JSR(out var v_main)
 
             .LDA_Imm(0xff)
-            .STA(0xdc02)
+            .STA(CIA1_DATA_DIRECTION_A)
             .LSR()
-            .STA(0xdc00)
+            .STA(CIA1_PORT_A)
             .LDA_Imm(0x10)
-            .BIT(0xdc01)
+            .BIT(CIA1_PORT_B)
             .BNE(mainloop);
 
         asm.Label(out var fadeloop)

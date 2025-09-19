@@ -7,6 +7,7 @@
 
 using AsmMos6502;
 using static AsmMos6502.Mos6502Factory;
+using static RetroC64.C64Registers;
 
 namespace RetroC64.Loader;
 
@@ -125,9 +126,9 @@ internal partial class SpinFire
         // Release the lines
 
         asm.LDA_Imm(0x3c)
-            .STA(0xdd02)
+            .STA(CIA2_DATA_DIRECTION_A)
             .LDX_Imm(0)
-            .STX(0xdd00);
+            .STX(CIA2_PORT_A);
 
         // Get TV standard flag
 
@@ -166,12 +167,12 @@ internal partial class SpinFire
         asm.Label(fast)
 
             // Wait for drive to signal BUSY.
-            .BIT(0xdd00)
+            .BIT(CIA2_PORT_A)
             .BMI(-5)
 
             // Pull ATN
-            .LDA_Imm(0x08)
-            .STA(0xdd00)
+            .LDA_Imm(CIAPortAFlags.SerialAtnOut)
+            .STA(CIA2_PORT_A)
 
             // The first loadset may overwrite stage1, so
             // we have to fake a jsr.
@@ -262,20 +263,20 @@ internal partial class SpinFire
             // ; c = pull clock = not working on a chain
             // ; drive pulls data if no data is available right now
 
-            .LDA_Imm(0x18); // want data, no ongoing chain
+            .LDA_Imm(CIAPortAFlags.SerialClockOut | CIAPortAFlags.SerialAtnOut); // want data, no ongoing chain
 
         asm.Label(out var mainloop);
         asm.Label(out var patch_1)
-            .AppendBuffer([0x80, 0x01]) // nop imm, becomes inc 1 in shadow RAM mode
+            .NOP_Imm(0x01) // nop imm, becomes inc 1 in shadow RAM mode
 
-            .CMP_Imm(0x38) // nothing more to do?
+            .CMP_Imm(CIAPortAFlags.SerialClockOut | CIAPortAFlags.SerialDataOut | CIAPortAFlags.SerialAtnOut) // nothing more to do?
             .BEQ(out var jobdone)
 
             // clc
-            .STA(0xdd00);  // send status
+            .STA(CIA2_PORT_A);  // send status
 
         asm.Label(out var checkbusy)
-            .BIT(0xdd00)   // check status
+            .BIT(CIA2_PORT_A)   // check status
             .BMI(out var transfer) // more data is expected AND available
 
             .BVC(checkbusy); // if we are pulling clock, we have no chain to work on
@@ -286,7 +287,7 @@ internal partial class SpinFire
 
         asm.Label(out var prof_link);
         asm.Label(out var patch_2)
-            .AppendBuffer([0x80, 0x01]) // nop imm, becomes dec 1 in shadow RAM mode
+            .NOP_Imm(0x01) // nop imm, becomes inc 1 in shadow RAM mode
             .PHA(); // save status flags
 
         asm.Label(out var linkloop)
@@ -337,7 +338,7 @@ internal partial class SpinFire
 
             .PLA() // either 08 or 28
             .ORA_Imm(0x10)
-            .Append(0xF0); // beq, skip pla
+            .Append((byte)Mos6510OpCode.BEQ_Relative); // beq, skip pla
 
         asm.Label(linknotdone)
             .PLA()
@@ -365,10 +366,10 @@ internal partial class SpinFire
         asm.Label(transfer);
         asm.Label(out var prof_xfer)
 
-            // a is either 08 or 18
+            // a is either SerialAtnOut or (SerialAtnOut | SerialClockOut)
 
-            .EOR_Imm(0x28) // becomes either 20 or 30
-            .STA(0xdd00)    // release atn while pulling data to request first bit pair
+            .EOR_Imm(CIAPortAFlags.SerialDataOut | CIAPortAFlags.SerialAtnOut) // CIAPortAFlags.SerialDataOut || (SerialDataOut|SerialClockOut)
+            .STA(CIA2_PORT_A)    // release atn while pulling data to request first bit pair
 
             // data must remain held for 22 cycles
             // and the first bit pair is available after 51 cycles
@@ -379,8 +380,10 @@ internal partial class SpinFire
             .DEY()
             .BPL(delay)
 
-            .LDX_Imm(8)
-            .SAX(0xdd00) // release data so we can read it
+            // Y = 0xFF here
+
+            .LDX_Imm(CIAPortAFlags.SerialAtnOut)
+            .SAX(CIA2_PORT_A) // release data so we can read it
             .BCC(out var receive); // always
 
         asm.Label(out var recvloop)
@@ -388,24 +391,24 @@ internal partial class SpinFire
             .LSR()
             .LSR();
         asm.Label(speedpatch1)
-            .EOR(0xdd00) // bbaa00xx
-            .SAX(0xdd00)
+            .EOR(CIA2_PORT_A) // bbaa00xx
+            .SAX(CIA2_PORT_A)
             .LSR()
             .LSR()
             .INY()
             .LabelForward(out var mod_store)
             .STY(mod_store + 1);
         asm.Label(speedpatch2)
-            .ORA(0xdd00) // ccbbaaxx
-            .STX(0xdd00) // pull atn to request fourth pair
+            .ORA(CIA2_PORT_A) // ccbbaaxx
+            .STX(CIA2_PORT_A) // pull atn to request fourth pair
             .LSR()
             .LSR()
             .LabelForward(out var mod_last)
             .STA(mod_last + 1)
-            .LDA_Imm(0xC0);
+            .LDA_Imm(CIAPortAFlags.SerialDataIn | CIAPortAFlags.SerialClockIn);
         asm.Label(speedpatch3)
-            .AND(0xdd00)
-            .STA(0xdd00); // release atn to request first pair (or status)
+            .AND(CIA2_PORT_A)
+            .STA(CIA2_PORT_A); // release atn to request first pair (or status)
         asm.Label(mod_last)
             .ORA_Imm(0); // ddccbbaa
         asm.Label(mod_store)
@@ -413,8 +416,8 @@ internal partial class SpinFire
             .CPY(buffer); // carry set if this was the last byte
         asm.Label(receive)
             .Label(speedpatch4)
-            .LDA(0xdd00) // aa0000xx
-            .STX(0xdd00) // pull atn to request second pair (or ack status)
+            .LDA(CIA2_PORT_A) // aa0000xx
+            .STX(CIA2_PORT_A) // pull atn to request second pair (or ack status)
             .BCC(recvloop)
 
             .PHA(); // save status bits (more to receive & chain flag)

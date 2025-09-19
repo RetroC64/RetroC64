@@ -10,6 +10,8 @@ using static AsmMos6502.Mos6502Factory;
 
 namespace RetroC64.Loader;
 
+using static C1541Registers;
+
 internal partial class SpinFire
 {
     internal static void AssembleSilence(Mos6510Assembler asm)
@@ -43,45 +45,45 @@ internal partial class SpinFire
             .LDA_Imm(0xd0) // job code, execute buffer
             .STA(1)
 
-            .STX(0x180e)
-            .STX(0x180d)
-            .STX(0x1c0e)
-            .STX(0x1c0d)
+            .STX(VIA1_INTERRUPT_CONTROL)
+            .STX(VIA1_INTERRUPT_STATUS)
+            .STX(VIA2_INTERRUPT_CONTROL)
+            .STX(VIA2_INTERRUPT_STATUS)
 
             .LDX_Imm(0x01)
-            .STX(0x1c0b) // timer 1 one-shot, latch port a
+            .STX(VIA2_TIMER_CONTROL) // timer 1 one-shot, latch port a
             .DEX()
             .LDA_Imm(0xc0) // enable timer 1 interrupt
-            .STA(0x1c0e)
+            .STA(VIA2_INTERRUPT_CONTROL)
 
             .LDA_Imm(0x10)
-            .STA(0x1800)
+            .STA(VIA1_PORT_B)
 
             .LDY_Imm(64);
 
         asm.Label(out var preloop)
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BMI(-5)
-            .STX(0x1800)
+            .STX(VIA1_PORT_B)
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BPL(-5)
-            .STA(0x1800)
+            .STA(VIA1_PORT_B)
 
             .DEY()
             .BPL(preloop);
 
         asm.Label(out var loop)
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BMI(-5)
-            .STX(0x1800)
+            .STX(VIA1_PORT_B)
 
-            .STY(0x1c05)
+            .STY(VIA2_TIMER_HIGH)
             .CLI()
 
-            .BIT(0x1800)
+            .BIT(VIA1_PORT_B)
             .BPL(-5)
-            .STA(0x1800)
+            .STA(VIA1_PORT_B)
 
             .SEI()
             .BMI(loop);

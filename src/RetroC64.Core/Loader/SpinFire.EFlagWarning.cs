@@ -12,6 +12,8 @@ using static AsmMos6502.Mos6502Factory;
 
 namespace RetroC64.Loader;
 
+using static C64Registers;
+
 internal partial class SpinFire
 {
     public static void AssembleEFlagWarning(Mos6510Assembler asm)
@@ -28,7 +30,7 @@ internal partial class SpinFire
             .LDA(_[0x14], Y)
             .STA(0x400, X)
             .LDA_Imm(1)
-            .STA(0xd800, X)
+            .STA(COLOR_RAM_BASE_ADDRESS, X)
             .INX()
             .INY()
             .CPX_Imm(5 * 40)

@@ -24,6 +24,8 @@ public static class C64AssemblerExtensions
     /// </remarks>
     public static Mos6510Assembler  LDA_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDA_Imm(Unsafe.As<TEnum, byte>(ref value));
 
+    public static Mos6510Assembler CMP_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.CMP_Imm(Unsafe.As<TEnum, byte>(ref value));
+
     public static Mos6510Assembler  LDX_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDX_Imm(Unsafe.As<TEnum, byte>(ref value));
 
     public static Mos6510Assembler  LDY_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDY_Imm(Unsafe.As<TEnum, byte>(ref value));
