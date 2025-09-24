@@ -12,7 +12,7 @@ namespace RetroC64.Loader;
 
 using static C64Registers;
 
-internal partial class SpinFire
+partial class SpinFire
 {
     // org = 0x200
     public static void AssemblePrgLoader(Mos6510Assembler asm, ushort org = 0x200)

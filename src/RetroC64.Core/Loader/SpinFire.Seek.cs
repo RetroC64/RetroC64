@@ -12,7 +12,7 @@ using static RetroC64.C64Registers;
 
 namespace RetroC64.Loader;
 
-internal partial class SpinFire
+partial class SpinFire
 {
     internal void AssemblySeek(Mos6510Assembler asm)
     {

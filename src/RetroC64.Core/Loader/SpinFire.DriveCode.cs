@@ -21,7 +21,7 @@ using static C1541Registers;
 /// C# translation of drivecode.s for the 1541, using Mos6510Assembler.
 /// All comments are preserved from the original source.
 /// </summary>
-internal partial class SpinFire
+partial class SpinFire
 {
     // ---------------------- Memory Layout and Constants ----------------------
 
@@ -189,8 +189,8 @@ internal partial class SpinFire
             .LDA_Imm(0x0c)
             .STA(ledmask)
             .LDA(VIA2_PORT_B)
-            .AND_Imm(0x03)
-            .ORA_Imm(0x4c) // led and motor on, bitrate for track 18
+            .AND_Imm(VIA2PortB.StepDirectionMask)
+            .ORA_Imm(VIA2PortB.Led | VIA2PortB.Motor | (VIA2PortB)VIA2Density.High) // led and motor on, bitrate for track 18
             .STA(VIA2_PORT_B)
 
             .LDA_Imm(19)

@@ -14,7 +14,7 @@ namespace RetroC64.Loader;
 
 using static C64Registers;
 
-internal partial class SpinFire
+partial class SpinFire
 {
     public static void AssembleEFlagWarning(Mos6510Assembler asm)
     {
