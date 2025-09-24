@@ -11,7 +11,7 @@ using static RetroC64.C64Registers;
 
 namespace RetroC64.Loader;
 
-partial class SpinFire
+partial class Spindle
 {
     public void AssembleStage1(Mos6510Assembler asm)
     {

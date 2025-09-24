@@ -12,7 +12,7 @@ namespace RetroC64.Loader;
 
 using static C1541Registers;
 
-partial class SpinFire
+partial class Spindle
 {
     internal static void AssembleSilence(Mos6510Assembler asm)
     {

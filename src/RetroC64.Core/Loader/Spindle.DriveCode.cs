@@ -21,7 +21,7 @@ using static C1541Registers;
 /// C# translation of drivecode.s for the 1541, using Mos6510Assembler.
 /// All comments are preserved from the original source.
 /// </summary>
-partial class SpinFire
+partial class Spindle
 {
     // ---------------------- Memory Layout and Constants ----------------------
 
@@ -58,7 +58,7 @@ partial class SpinFire
         // Spindle by lft, linusakesson.net/software/spindle/
         // This code executes inside the 1541.
         // Memory
-        //  000 - Zero page; contains the gcr loop at $30-$91
+        //  000 - Zero page; contains also the gcr loop at $60 - .. (TODO calculate exact size)
         //  100 - Stack; used as block buffer
         //  200 - Code for serial communication
         //  300 - Code for fetching data from disk
