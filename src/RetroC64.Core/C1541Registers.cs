@@ -295,15 +295,58 @@ public static class C1541Registers
 
     /// <summary>
     /// VIA2 Timer Control Register bits (<see cref="C1541Registers.VIA2_TIMER_CONTROL"/>).
+    /// <code>
+    /// +----------+---------------------------------------------------------+
+    /// | Bits 7-6 |   Timer 1 Control:                                      |
+    /// |          |     00 = Timed Interrupt when Timer 1 is loaded, no PB7 |
+    /// |          |     01 = Continuous Interrupts, no PB7                  |
+    /// |          |     10 = Timed Interrupt when Timer 1 is loaded,        |
+    /// |          |          one-shot on PB7                                |
+    /// |          |     11 = Continuous Interrupts, square-wave on PB7      |
+    /// | Bit  5   |   Timer 2 Control: 0 = Timed Interrupt                  |
+    /// |          |                    1 = Count Pulses on PB6              |
+    /// | Bits 4-2 |   Shift Register Control:                               |
+    /// |          |     000 = Disabled                                      |
+    /// |          |     001 = Shift in under control of Timer 2             |
+    /// |          |     010 = Shift in under control of Phi2                |
+    /// |          |     011 = Shift in under control of ext. Clock          |
+    /// |          |     100 = Shift out free-running at Timer 2 rate        |
+    /// |          |     101 = Shift out under control of Timer 2            |
+    /// |          |     110 = Shift out under control of Phi2               |
+    /// |          |     111 = Shift out under control of ext. Clock         |
+    /// | Bit  1   |   1 = enable latching PB                                |
+    /// | Bit  0   |   1 = enable latching PA                                |
+    /// +----------+---------------------------------------------------------+
+    /// </code>>
     /// </summary>
+    /// <remarks>
+    /// Doc from http://unusedino.de/ec64/technical/aay/c1541/via2b.htm
+    /// </remarks>
     [Flags]
     public enum VIA2TimerControl : byte
     {
-        /// <summary>Bit 6 = 0: Stop timer.</summary>
-        Stop = 0,
+        /// <summary>Enable latching PA</summary>
+        EnableLatchingPA = 1 << 0,
+        /// <summary>Enable latching PB</summary>
+        EnableLatchingPB = 1 << 1,
+        /// <summary>Shift Register Control mask (bits 2-4)</summary>
+        ShiftRegisterControlMask = 0b111 << 2,
+        /// <summary>Timer 2 Control: 0 = Timed Interrupt, 1 = Count Pulses on PB6</summary>
+        CountPulsesOnPB6 = 1 << 5,
+        /// <summary>Timer 1 Control mask (bits 6-7)</summary>
+        Timer1ControlMask = 0b11 << 6,
+    }
 
-        /// <summary>Bit 6 = 1: Start timer.</summary>
-        Start = 1 << 6
+    public enum VIA2TimerControlInterrupt : byte
+    {
+        /// <summary>Timed Interrupt when Timer 1 is loaded, no PB7</summary>
+        TimedInterruptWhenTimer1IsLoadedNoPB7 = 0,
+        /// <summary>Continuous Interrupts, no PB7</summary>
+        ContinuousInterruptsNoPB7 = 0b01 << 6,
+        /// <summary>Timed Interrupt when Timer 1 is loaded, one-shot on PB7</summary>
+        TimedInterruptWhenTimer1IsLoadedOneShotOnPB7 = 0b10 << 6,
+        /// <summary>Continuous Interrupts, square-wave on PB7</summary>
+        ContinuousInterruptsSquareWaveOnPB7 = 0b11 << 6,
     }
 
     /// <summary>
@@ -313,13 +356,13 @@ public static class C1541Registers
     public enum VIA2AuxControl : byte
     {
         /// <summary>Bits 1-3: Attach Byte Ready line to V flag.</summary>
-        ByteReadyToVFlagMask = 0b111 << 1,
+        ByteReadyToCpuVFlag = 0b111 << 1,
 
         /// <summary>Bits 5-7: Read head mode.</summary>
-        HeadReadMask = 0b111 << 5,
+        HeadRead = 0b111 << 5,
 
         /// <summary>Bits 5-7: Write head mode.</summary>
-        HeadWriteMask = 0b110 << 5
+        HeadWrite = 0b110 << 5
     }
 
     /// <summary>
