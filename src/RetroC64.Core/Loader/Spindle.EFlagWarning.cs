@@ -7,8 +7,8 @@
 
 // ReSharper disable InconsistentNaming
 
-using AsmMos6502;
-using static AsmMos6502.Mos6502Factory;
+using Asm6502;
+using static Asm6502.Mos6502Factory;
 
 namespace RetroC64.Loader;
 
@@ -40,9 +40,9 @@ partial class Spindle
 
         asm.Label(message)
             .AppendBytes(40, 0x43)
-            .AppendBuffer(C64CharSet.StringToPETScreenCode("this version was built with the -e flag!".ToUpperInvariant()))
-            .AppendBuffer(C64CharSet.StringToPETScreenCode("the drivecode will inject random read   ".ToUpperInvariant()))
-            .AppendBuffer(C64CharSet.StringToPETScreenCode("errors to cause delays.                 ".ToUpperInvariant()))
+            .Append(C64CharSet.StringToPETScreenCode("this version was built with the -e flag!".ToUpperInvariant()))
+            .Append(C64CharSet.StringToPETScreenCode("the drivecode will inject random read   ".ToUpperInvariant()))
+            .Append(C64CharSet.StringToPETScreenCode("errors to cause delays.                 ".ToUpperInvariant()))
             .AppendBytes(40, 0x43);
 
         asm.End();

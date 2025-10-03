@@ -20,6 +20,20 @@ public static class C1541Registers
     /// VIA #1 Port B ($1800). Serial bus control.
     /// See <see cref="VIA1PortB"/> for bit definitions.
     /// </summary>
+    /// <remarks>
+    /// <code>
+    /// +----------+---------------------------------------------------+
+    /// | Bit  7   |   ATN IN;    0 = Low, 1 = High.                   |
+    /// | Bits 6-5 |   Device address preset switches:                 |
+    /// |          |     00 = #8, 01 = #9, 10 = #10, 11 = #11          |
+    /// | Bit  4   |   ATNA OUT;  1 = Enable automatic ATN acknowledge.|
+    /// | Bit  3   |   CLOCK OUT; 0 = Low, 1 = High.                   |
+    /// | Bit  2   |   CLOCK IN;  0 = Low, 1 = High.                   |
+    /// | Bit  1   |   DATA OUT;  0 = Low, 1 = High.                   |
+    /// | Bit  0   |   DATA IN;   0 = Low, 1 = High.                   |
+    /// +----------+---------------------------------------------------+
+    /// </code>
+    /// </remarks>
     public const ushort VIA1_PORT_B = 0x1800;
 
     /// <summary>
@@ -147,6 +161,21 @@ public static class C1541Registers
     /// VIA #2 Interrupt Status Register ($1C0D).
     /// See <see cref="VIA2InterruptFlags"/> for bit definitions.
     /// </summary>
+    /// <remarks>
+    /// <code>
+    /// +-------+------------------------------------------------------+
+    /// | Bit 7 |   1 = Interrupt occured                              |
+    /// | Bit 6 |   Timer 1                                            |
+    /// | Bit 5 |   Timer 2                                            |
+    /// | Bit 4 |   CB1                                                |
+    /// | Bit 3 |   CB2                                                |
+    /// | Bit 2 |   Shift Register                                     |
+    /// | Bit 1 |   CA1                                                |
+    /// | Bit 0 |   CA2                                                |
+    /// +-------+------------------------------------------------------+
+    /// </code>
+    /// http://unusedino.de/ec64/technical/aay/c1541/via2d.htm
+    /// </remarks>
     public const ushort VIA2_INTERRUPT_STATUS = 0x1C0D;
 
     /// <summary>
@@ -371,8 +400,22 @@ public static class C1541Registers
     [Flags]
     public enum VIA2InterruptFlags : byte
     {
-        /// <summary>Bit 6: Timer underflow occurred.</summary>
-        TimerUnderflow = 1 << 6
+        /// <summary>Bit 0: CA2</summary>
+        CA2 = 1 << 0,
+        /// <summary>Bit 1: CA1</summary>
+        CA1 = 1 << 1,
+        /// <summary>Bit 2: Shift Register</summary>
+        ShiftRegister = 1 << 2,
+        /// <summary>Bit 3: CB2</summary>
+        CB2 = 1 << 3,
+        /// <summary>Bit 4: CB1</summary>
+        CB1 = 1 << 4,
+        /// <summary>Bit 5: Timer 2</summary>
+        Timer2 = 1 << 5,
+        /// <summary>Bit 6: Timer underflow occurred (Timer 1)</summary>
+        Timer1 = 1 << 6,
+        /// <summary>Bit 7: Interrupt occurred</summary>
+        InterruptOccurred = 1 << 7
     }
 
     /// <summary>

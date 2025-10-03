@@ -5,8 +5,8 @@
 // Translated from stage1.s from Spindle3.1
 // Original code with MIT license - Copyright (c) 2013-2022 Linus Akesson
 
-using AsmMos6502;
-using static AsmMos6502.Mos6502Factory;
+using Asm6502;
+using static Asm6502.Mos6502Factory;
 using static RetroC64.C64Registers;
 // ReSharper disable InconsistentNaming
 

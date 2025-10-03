@@ -5,8 +5,8 @@
 // Translated from stage1.s from Spindle3.1
 // Original code with MIT license - Copyright (c) 2013-2022 Linus Akesson
 
-using AsmMos6502;
-using static AsmMos6502.Mos6502Factory;
+using Asm6502;
+using static Asm6502.Mos6502Factory;
 using static RetroC64.C64Registers;
 
 namespace RetroC64.Loader;
@@ -47,7 +47,7 @@ partial class Spindle
             .Append(basicstub)
             .Org(0x801)
             .Label(basicstub)
-            .AppendBuffer([0x0b, 0x08, 0x01, 0x00, 0x9E, .. "2061"u8, 0, 0, 0])
+            .Append([0x0b, 0x08, 0x01, 0x00, 0x9E, .. "2061"u8, 0, 0, 0])
 
             // What unit should we load from?
 
@@ -214,15 +214,15 @@ partial class Spindle
         {
             using var asm2 = new Mos6510Assembler();
             AssembleSilence(asm2);
-            asm.AppendBuffer(asm2.Buffer);
+            asm.Append(asm2.Buffer);
         }
 
         asm.Label(cmd_runsil)
-            .AppendBuffer([.. "M-E"u8, 3, 4]);
+            .Append([.. "M-E"u8, 3, 4]);
 
         asm.Label(cmd_install)
             // 23 bytes out of 42
-            .AppendBuffer([.. "M-E"u8])
+            .Append([.. "M-E"u8])
             .Append(0x205)
 
             // Load first drivecode block into buffer 3 at $600
@@ -543,7 +543,7 @@ partial class Spindle
 
         // ---------------------------------------------------
         asm.Label(cmd_upload)
-            .AppendBuffer([.. "M-W"u8, 0x00, 0x04, 0x20]);
+            .Append([.. "M-W"u8, 0x00, 0x04, 0x20]);
 
         asm.End();
     }

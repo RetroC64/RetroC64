@@ -7,9 +7,9 @@
 
 // ReSharper disable InconsistentNaming
 
-using AsmMos6502;
-using AsmMos6502.Expressions;
-using static AsmMos6502.Mos6502Factory;
+using Asm6502;
+using Asm6502.Expressions;
+using static Asm6502.Mos6502Factory;
 
 // ReSharper disable IdentifierTypo
 
@@ -236,7 +236,7 @@ partial class Spindle
                 .JMP(0xd586);
 
             asm.Label(init_track_sectors)
-                .AppendBuffer([18, 11, 18, 2, 18, 3]);
+                .Append([18, 11, 18, 2, 18, 3]);
 
             asm.Label(zpcodeblock_to_relocate)
                 .Org(ZPORG)
@@ -1009,7 +1009,7 @@ partial class Spindle
             asm.Label(sendentry)
                 .STA(VIA1_PORT_B) // 0000e-g-
                 .ASL()
-                .ORA_Imm(0x10)
+                .ORA_Imm(VIA1PortB.AtnaOut)
                 .CPY(chunkend)
                 .BIT(VIA1_PORT_B)
                 .BPL(-5)
@@ -1137,8 +1137,8 @@ partial class Spindle
 
             asm.Label(retrysector)
                 .Append(0x40) // Continuation record indicator
-                .AppendBuffer([8, 0, 0]) // Continue with sector 17
-                .AppendBuffer([5, 0, 0xbf, 0, 0x8f, 0]) // Dummy data unit(patched in disk.c)
+                .Append([8, 0, 0]) // Continue with sector 17
+                .Append([5, 0, 0xbf, 0, 0x8f, 0]) // Dummy data unit(patched in disk.c)
                 .Append(0); // No more units
 
             asm.Label(nextsideid)
@@ -1162,7 +1162,8 @@ partial class Spindle
             asm.Label(out var async_loop)
                 .BIT(VIA1_PORT_B)
                 .BPL(out var async_reset) // system reset detected
-                .LDX_Imm(0x10)
+
+                .LDX_Imm(VIA1PortB.AtnaOut)
                 .STX(VIA1_PORT_B) // release data
 
                 .BIT(VIA1_PORT_B) // wait for atn to be released

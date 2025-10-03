@@ -4,50 +4,14 @@
 
 // ReSharper disable InconsistentNaming
 
-using AsmMos6502;
-using System.Runtime.CompilerServices;
+using Asm6502;
 using static RetroC64.C64Registers;
-using static AsmMos6502.Mos6502Factory;
+using static Asm6502.Mos6502Factory;
 
 namespace RetroC64;
 
 public static class C64AssemblerExtensions
 {
-    /// <summary>
-    /// Loads an immediate enum value into the A register.
-    /// </summary>
-    /// <param name="asm">The assembler to pop registers.</param>
-    /// <param name="value">The enum value to load into the A register.</param>
-    /// <returns>The assembler instance for chaining.</returns>
-    /// <remarks>
-    /// Modifies the A register.
-    /// </remarks>
-    public static Mos6510Assembler  LDA_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDA_Imm(Unsafe.As<TEnum, byte>(ref value));
-
-    public static Mos6510Assembler CMP_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.CMP_Imm(Unsafe.As<TEnum, byte>(ref value));
-
-    public static Mos6510Assembler  LDX_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDX_Imm(Unsafe.As<TEnum, byte>(ref value));
-
-    public static Mos6510Assembler  LDY_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.LDY_Imm(Unsafe.As<TEnum, byte>(ref value));
-
-    /// <summary>
-    /// Logical AND. AND instruction (0x29) with addressing mode Immediate with an enum value.
-    /// </summary>
-    /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
-    public static Mos6510Assembler  AND_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.AND_Imm(Unsafe.As<TEnum, byte>(ref value));
-
-    /// <summary>
-    /// Logical Inclusive OR. ORA instruction (0x09) with addressing mode Immediate.
-    /// </summary>
-    /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
-    public static Mos6510Assembler  ORA_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.ORA_Imm(Unsafe.As<TEnum, byte>(ref value));
-
-    /// <summary>
-    /// Logical Exclusive OR (XOR). EOR instruction (0x49) with addressing mode Immediate.
-    /// </summary>
-    /// <remarks>Cycles: 2, Size: 2 bytes</remarks>
-    public static Mos6510Assembler  EOR_Imm<TEnum>(this Mos6510Assembler asm, TEnum value) where TEnum : struct, Enum => asm.EOR_Imm(Unsafe.As<TEnum, byte>(ref value));
-
     /// <summary>
     /// Sets up the stack pointer to $ff, which is the top of the C64 stack.
     /// </summary>

@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AsmMos6502" />
+    <PackageReference Include="Asm6502" />
   </ItemGroup>
   
 

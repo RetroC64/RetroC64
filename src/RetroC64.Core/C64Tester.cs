@@ -2,7 +2,7 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
-using AsmMos6502;
+using Asm6502;
 using RetroC64.Basic;
 using static RetroC64.C64Registers;
 

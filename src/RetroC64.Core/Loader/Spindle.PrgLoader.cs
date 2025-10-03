@@ -5,8 +5,8 @@
 // Translated from prgloader.s from Spindle3.1
 // Original code with MIT license - Copyright (c) 2013-2022 Linus Akesson
 
-using AsmMos6502;
-using static AsmMos6502.Mos6502Factory;
+using Asm6502;
+using static Asm6502.Mos6502Factory;
 
 namespace RetroC64.Loader;
 
@@ -26,7 +26,7 @@ partial class Spindle
             .Append(0x801)
             .Append(0x80b)
             .Append((ushort)0x001)
-            .AppendBuffer([0x9e, .. "2061"u8, 0, 0, 0]);
+            .Append([0x9e, .. "2061"u8, 0, 0, 0]);
 
         asm.Label(out var start)
             .LDA_Imm(0x7f)

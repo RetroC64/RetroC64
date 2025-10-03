@@ -571,6 +571,10 @@ public static class C64Registers
 
     /// <summary>
     /// Port A, serial bus access.
+    /// See <see cref="CIAPortAFlags"/>.
+    /// </summary>
+    /// <remarks>
+    /// <code>
     /// Bits 0-1: VIC bank select.
     /// Bit 2: RS232 TXD.
     /// Bit 3: Serial ATN OUT.
@@ -578,8 +582,8 @@ public static class C64Registers
     /// Bit 5: Serial DATA OUT.
     /// Bit 6: Serial CLOCK IN.
     /// Bit 7: Serial DATA IN.
-    /// See <see cref="CIAPortAFlags"/>.
-    /// </summary>
+    /// </code>
+    /// </remarks>
     public const ushort CIA2_PORT_A = 0xDD00;
 
     /// <summary>
