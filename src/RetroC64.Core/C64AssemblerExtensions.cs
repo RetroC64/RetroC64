@@ -5,6 +5,7 @@
 // ReSharper disable InconsistentNaming
 
 using Asm6502;
+using Asm6502.Expressions;
 using static RetroC64.C64Registers;
 using static Asm6502.Mos6502Factory;
 
@@ -51,6 +52,10 @@ public static class C64AssemblerExtensions
             .LDA_Imm(CIAInterruptFlags.ClearAllInterrupts)
             .STA(CIA1_INTERRUPT_CONTROL) // CIA1 IRQs
             .STA(CIA2_INTERRUPT_CONTROL) // CIA2 IRQs
+
+            .LDA(CIA1_INTERRUPT_CONTROL) // Clear any pending CIA1 IRQ
+            .LDA(CIA2_INTERRUPT_CONTROL) // Clear any pending CIA2 IRQ
+
             .LDA(VIC2_INTERRUPT)
             .STA(VIC2_INTERRUPT); // Acknowledge any pending VIC IRQ
 
@@ -134,8 +139,8 @@ public static class C64AssemblerExtensions
     /// <returns>The assembler instance for chaining.</returns>
     public static Mos6510Assembler  InfiniteLoop(this Mos6510Assembler  asm)
         => asm
-            .Label("infiniteLoop", out var label)
-            .JMP(label);
+            .Label(out var infinite)
+            .JMP(infinite);
 
     /// <summary>
     /// This method installs a raster IRQ handler on the C64 by setting up the VIC-II registers
@@ -175,7 +180,7 @@ public static class C64AssemblerExtensions
     /// </remarks>
     public static Mos6510Assembler  DisableNmi(this Mos6510Assembler  asm)
         => asm
-            .LabelForward("nmiHandler", out var nmiHandler)
+            .LabelForward(out var nmiHandler)
             .StoreLabelAtAddress(nmiHandler, NMI_VECTOR) // Store the NMI handler address at the NMI vector
 
             // Disable NMI by setting Timer A to 0 and starting it
@@ -190,7 +195,7 @@ public static class C64AssemblerExtensions
             .LDA_Imm(CIAControlAFlags.Start)
             .STA(CIA2_CONTROL_A)   // Start CIA2 Timer A -> NMI
 
-            .LabelForward("skipNmi", out var skipNmi)
+            .LabelForward(out var skipNmi)
             .JMP(skipNmi)
 
             // Empty NMI handler (inlined)
@@ -208,7 +213,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// This code must be set between a pair of SEI/CLI instructions to avoid interrupts during the timing-sensitive operation.
     /// </remarks>
-    public static Mos6510Assembler  SetupTimeOfDayAndGetVerticalFrequency(this Mos6510Assembler  asm)
+    public static Mos6510Assembler SetupTimeOfDayAndGetVerticalFrequency(this Mos6510Assembler  asm)
     {
         // From https://codebase64.pokefinder.org/doku.php?id=cia:efficient_tod_initialisation
         // Credits to Silver Dream ! / Thorgal / W.F.M.H.
@@ -274,5 +279,58 @@ public static class C64AssemblerExtensions
             .LDA_Imm(1) // b0 : Vertical 50Hz (PAL)
 
             .Label(ret);
+    }
+
+
+    public static Mos6510Assembler CopyMemory(this Mos6510Assembler asm, Mos6502ExpressionU16 src, Mos6502ExpressionU16 dst, ushort length)
+    {
+        if (length == 0) return asm;
+        
+        var numberOf256Blocks = (byte)(length / 256);
+        var remaining = (byte)(length % 256);
+
+        // Copy per 256 bytes and then byte per byte
+        asm.LDX_Imm(numberOf256Blocks == 0 ? (byte)(remaining + 1) : (byte)0);
+
+        if (numberOf256Blocks > 0)
+        {
+            asm.LDY_Imm(numberOf256Blocks);
+        }
+
+        // Make the code reentrant (restore src / dst addresses)
+        asm.LabelForward(out var mod_src)
+            .LabelForward(out var mod_dst)
+            .LDA_Imm(src.LowByte())
+            .STA(mod_src + 1)
+            .LDA_Imm(src.HighByte())
+            .STA(mod_src + 2)
+            .LDA_Imm(dst.LowByte())
+            .STA(mod_dst + 1)
+            .LDA_Imm(dst.HighByte())
+            .STA(mod_dst + 2);
+
+        asm.Label(out var loop)
+            .DEX()
+            .Label(mod_src).LDA(src, X)
+            .Label(mod_dst).STA(dst, X)
+            .TXA()
+            .BNE(loop);
+
+        if (numberOf256Blocks > 0)
+        {
+            asm.INC(mod_src + 2) // Increment high byte of src
+                .INC(mod_dst + 2) // Increment high byte of dst
+                .DEY()
+                .BNE(loop);
+
+            if (remaining > 0)
+            {
+                asm.LDX_Imm((byte)(remaining + 1));
+                asm.LDY_Imm(1);
+                asm.BNE(loop);
+            }
+        }
+
+        return asm;
     }
 }

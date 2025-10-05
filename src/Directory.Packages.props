@@ -4,7 +4,7 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Asm6502" Version="1.1.1" />
+    <PackageVersion Include="Asm6502" Version="1.1.2" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.2" />
     <PackageVersion Include="CliWrap" Version="3.9.0" />
     <PackageVersion Include="MinVer" Version="6.0.0" />
