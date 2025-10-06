@@ -9,5 +9,6 @@
     <PackageVersion Include="CliWrap" Version="3.9.0" />
     <PackageVersion Include="MinVer" Version="6.0.0" />
     <PackageVersion Include="MSTest" Version="3.8.3" />
+    <PackageVersion Include="SkiaSharp" Version="3.119.1" />
   </ItemGroup>
 </Project>
