@@ -77,7 +77,7 @@ public static class C64AssemblerExtensions
         asm
             .LDA_Imm(value) // Load the value to clear
             .LDX_Imm(0) // Initialize X to 0
-            .Label("clearLoop", out var loop);
+            .Label(out var loop);
 
         for (int i = 0; i < count; i++)
         {
@@ -178,32 +178,34 @@ public static class C64AssemblerExtensions
     /// <para>Inspired by <a href="https://codebase64.pokefinder.org/doku.php?id=base:nmi_lock">codebase64 / nmi_lock</a></para>
     /// <para>Modifies the A register</para>
     /// </remarks>
-    public static Mos6510Assembler  DisableNmi(this Mos6510Assembler  asm)
-        => asm
+    public static Mos6510Assembler DisableNmi(this Mos6510Assembler asm)
+    {
+        asm
             .LabelForward(out var nmiHandler)
             .StoreLabelAtAddress(nmiHandler, NMI_VECTOR) // Store the NMI handler address at the NMI vector
 
             // Disable NMI by setting Timer A to 0 and starting it
             .LDA_Imm(CIAControlAFlags.None)
-            .STA(CIA2_CONTROL_A)   // Disable CIA2 Timer A
-            .STA(CIA2_TIMER_A_LO)  // Sets Timer A at 0
-            .STA(CIA2_TIMER_A_HI)  // So that NMI will occur immediately
+            .STA(CIA2_CONTROL_A) // Disable CIA2 Timer A
+            .STA(CIA2_TIMER_A_LO) // Sets Timer A at 0
+            .STA(CIA2_TIMER_A_HI) // So that NMI will occur immediately
 
             .LDA_Imm(CIAInterruptFlags.TimerA | CIAInterruptFlags.IRQ)
             .STA(CIA2_INTERRUPT_CONTROL) // Set Timer A source for CIA2
 
             .LDA_Imm(CIAControlAFlags.Start)
-            .STA(CIA2_CONTROL_A)   // Start CIA2 Timer A -> NMI
+            .STA(CIA2_CONTROL_A) // Start CIA2 Timer A -> NMI
 
-            .LabelForward(out var skipNmi)
-            .JMP(skipNmi)
+            .JMP(out var skipNmi);
 
-            // Empty NMI handler (inlined)
-            .Label(nmiHandler)
+        // Empty NMI handler (inlined)
+        asm.Label(nmiHandler)
             //.INC(VIC2_BORDER_COLOR) // Just to have a cycle on screen for testing
-            .RTI()
+            .RTI();
 
-            .Label(skipNmi);
+        asm.Label(skipNmi);
+        return asm;
+    }
 
     /// <summary>
     /// Sets up the Time of Day (TOD) clock frequency (50Hz or 60Hz) on CIA2 and determines the vertical frequency (50Hz for PAL or 60Hz for NTSC).
@@ -225,11 +227,12 @@ public static class C64AssemblerExtensions
         const ushort TOD_60_MID = (TOD_60_HI + TOD_60_LO) >> 1; // Middle point for 60Hz
         const ushort TOD_50_MID = (TOD_50_HI + TOD_50_LO) >> 1; // Middle point for 50Hz
 
-        return asm
-            .LabelForward(out var ret) // Label at the end to return to
+        asm
+            .LabelForward(out var endSetupTimeOfDayAndGetVerticalFrequency) // Label at the end to return to
             .LDA_Imm(0)
-            .STA(CIA2_TIME_OF_DAY_10THS)
-            .Label(out var waitTenth1)
+            .STA(CIA2_TIME_OF_DAY_10THS);
+
+        asm.Label(out var waitTenth1)
             .CMP(CIA2_TIME_OF_DAY_10THS)
             .BEQ(waitTenth1)
 
@@ -240,21 +243,18 @@ public static class C64AssemblerExtensions
 
             // Set 60Hz TOD mode (bit 7 cleared)
             .LDA_Imm(CIAControlAFlags.Start | CIAControlAFlags.ForceLoad)
-            .STA(CIA2_CONTROL_A)
+            .STA(CIA2_CONTROL_A);
 
-            .Label(out var waitTenth2)
+        asm.Label(out var waitTenth2)
             .CMP(CIA2_TIME_OF_DAY_10THS)
             .BEQ(waitTenth2)
 
-            .LabelForward(out var tod60Hz)
             .LDA(CIA2_TIMER_A_HI)
 
             // Middle point between 50Hz and 60Hz
             .CMP_Imm(TOD_MID >> 8)
-            .BCS(tod60Hz)
+            .BCS(out var tod60Hz)
 
-            // 50Hz on TOD pin
-            .LabelForward(out var pal50)
             // Check PAL or NTSC
             .CMP_Imm(TOD_50_MID >> 8)
 
@@ -262,23 +262,26 @@ public static class C64AssemblerExtensions
             .LDA_Imm(CIAControlAFlags.TimeOfDaySpeed)
             .STA(CIA2_CONTROL_A)
 
-            .BCS(pal50)
+            // 50Hz on TOD pin
+            .BCS(out var pal50)
 
             .LDA_Imm(0) // b1 : Vertical 60Hz (NTSC)
-            .JMP(ret)
+            .JMP(endSetupTimeOfDayAndGetVerticalFrequency);
 
-            .Label(tod60Hz)
+        asm.Label(tod60Hz)
             // Check PAL or NTSC
             .CMP_Imm(TOD_60_MID >> 8)
             .BCS(pal50)
 
             .LDA_Imm(0) // b1 : Vertical 60Hz (NTSC)
-            .JMP(ret)
+            .JMP(endSetupTimeOfDayAndGetVerticalFrequency);
 
-            .Label(pal50)
-            .LDA_Imm(1) // b0 : Vertical 50Hz (PAL)
+        asm.Label(pal50)
+            .LDA_Imm(1); // b0 : Vertical 50Hz (PAL)
 
-            .Label(ret);
+        asm.Label(endSetupTimeOfDayAndGetVerticalFrequency);
+
+        return asm;
     }
 
 
@@ -300,6 +303,7 @@ public static class C64AssemblerExtensions
         // Make the code reentrant (restore src / dst addresses)
         asm.LabelForward(out var mod_src)
             .LabelForward(out var mod_dst)
+            .LabelForward(out var mod_remaining)
             .LDA_Imm(src.LowByte())
             .STA(mod_src + 1)
             .LDA_Imm(src.HighByte())
@@ -308,6 +312,12 @@ public static class C64AssemblerExtensions
             .STA(mod_dst + 1)
             .LDA_Imm(dst.HighByte())
             .STA(mod_dst + 2);
+
+            if (numberOf256Blocks > 0 && remaining > 0)
+            {
+                asm.LDA_Imm(0)
+                    .STA(mod_remaining + 1);
+            }
 
         asm.Label(out var loop)
             .DEX()
@@ -325,9 +335,18 @@ public static class C64AssemblerExtensions
 
             if (remaining > 0)
             {
-                asm.LDX_Imm((byte)(remaining + 1));
-                asm.LDY_Imm(1);
-                asm.BNE(loop);
+                asm.Label(mod_remaining)
+                    .LabelForward(out var exitRemaining)
+
+                    .LDA_Imm(0)
+                    .BNE(exitRemaining)
+                    .INC(mod_remaining + 1)
+
+                    .LDX_Imm((byte)(remaining + 1))
+                    .LDY_Imm(1)
+                    
+                    .BNE(loop)
+                    .Label(exitRemaining);
             }
         }
 

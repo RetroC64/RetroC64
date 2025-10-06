@@ -15,6 +15,8 @@ public static class C64Registers
 {
     // VIC-II (Video Interface Chip) Registers
 
+    public const ushort SPRITE0_ADDRESS_DEFAULT = 0x07F8;
+
     /// <summary>
     /// Sprite #0 X-coordinate (bits 0-7). Use <see cref="VIC2_SPRITE_X_MSB"/> for bit 8.
     /// </summary>

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="Asm6502" />
+    <PackageReference Include="SkiaSharp" />
   </ItemGroup>
   
 

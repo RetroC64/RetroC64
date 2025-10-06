@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Examples/">
+    <Project Path="../examples/C64NETConf2025/C64NETConf2025.csproj" Id="3aab6dfd-c863-4617-b37b-3e1e40ba15dc" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../.editorconfig" />
     <File Path="../.gitattributes" />

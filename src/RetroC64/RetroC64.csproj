@@ -40,5 +40,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RetroC64.Core\RetroC64.Core.csproj" />
+    <ProjectReference Include="..\RetroC64.Vice\RetroC64.Vice.csproj" />
   </ItemGroup>
 </Project>
