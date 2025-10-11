@@ -27,8 +27,7 @@ public static class Demo
         //var sidFilePath = Path.Combine(AppContext.BaseDirectory, "Sanxion_Re-load.sid");
         var sidFilePath = Path.Combine(AppContext.BaseDirectory, "Sanxion.sid");
         var buffer = File.ReadAllBytes(sidFilePath);
-        var sidFile = SidFile.FromBytes(buffer);
-
+        var sidFile = SidFile.Load(buffer);
 
         var startAsm = basicCompiler.StartAddress + basicCompiler.CurrentOffset;
         basicCompiler.Reset();
@@ -55,16 +54,18 @@ public static class Demo
         const byte topScreenLineDefault = 0x30;
         const byte bottomScreenLineDefault = 0xF8;
 
-        const byte zpCharPerFrame = 0xE0;
-        const byte zpBaseSinIndex = zpCharPerFrame + 1;
-        const byte zpSinIndex = zpBaseSinIndex + 1;
-        const byte zpIrqLine = zpSinIndex + 1;
-        const byte zpStartingIrqLine = zpIrqLine + 1;
-        const byte zpSpriteSinIndex = zpStartingIrqLine + 1;
-        const byte zpSpriteHighBitMask = zpSpriteSinIndex + 1;
-        const byte zpSpriteCenterX = zpSpriteHighBitMask + 1;
-        const byte zpMusicPosition = zpSpriteCenterX + 1; // 2 bytes
-
+        var zpAllocator = new ZeroPageAllocator();
+        var sidPlayer = new SidPlayer(sidFile, asm, zpAllocator, [0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xfb, 0xfc, 0xfd, 0xfe]);
+        
+        zpAllocator.Allocate(out var zpCharPerFrame);
+        zpAllocator.Allocate(out var zpBaseSinIndex);
+        zpAllocator.Allocate(out var zpSinIndex);
+        zpAllocator.Allocate(out var zpIrqLine);
+        zpAllocator.Allocate(out var zpStartingIrqLine);
+        zpAllocator.Allocate(out var zpSpriteSinIndex);
+        zpAllocator.Allocate(out var zpSpriteHighBitMask);
+        zpAllocator.Allocate(out var zpSpriteCenterX);
+        
         const int startVisibleScreenX = 24;
         const int startVisibleScreenY = 50;
         const int screenBitmapWidth = 320;
@@ -94,10 +95,6 @@ public static class Demo
             .LDA_Imm(bottomScreenLineDefault)
             .STA(zpStartingIrqLine)
             .STA(zpIrqLine) // First IRQ line
-
-            .LDA_Imm(0x0)
-            .STA(zpMusicPosition)
-            .STA(zpMusicPosition + 1)
             .STA(zpSpriteSinIndex)
             .STA(zpSinIndex)
             .STA(zpBaseSinIndex)
@@ -124,15 +121,9 @@ public static class Demo
             .INX()
             .BNE(start_fill_loop);
 
-        // Copy SID to its memory
-        if (sidFile.InitAddress != 0)
-        {
-            asm.CopyMemory(musicBuffer, new Mos6502Label("sidAddress", sidFile.EffectiveLoadAddress), (ushort)sidFile.ProgramDataSpan.Length)
-                .LDA_Imm((byte)(sidFile.StartSong - 1))
-                .TAX()
-                .TAY()
-                .JSR(sidFile.InitAddress);
-        }
+
+        // Initialize SID music
+        sidPlayer.Initialize();
         
         asm.LabelForward(out var spriteBuffer);
         // Copy Sprite to 0xE000
@@ -205,11 +196,11 @@ public static class Demo
             .LDA(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt
             .STA(VIC2_INTERRUPT); // Clear the interrupt flag
 
-        PlayMusic();
+        sidPlayer.PlayMusic();
 
         asm.LabelForward(out var fillScreen);
-    
-        IfNotAtPlayPositionGoTo((ushort)(11.75 * 50), fillScreen);
+
+        sidPlayer.BranchIfNotAtPlaybackPosition(11.75, fillScreen);
 
         asm.LDX_Imm(0)
             .LDA_Imm(COLOR_BLUE);
@@ -313,11 +304,11 @@ public static class Demo
             .LDA(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt
             .STA(VIC2_INTERRUPT); // Clear the interrupt flag
 
-        PlayMusic();
+        sidPlayer.PlayMusic();
 
         asm.LabelForward(out var continueAnimateSprite);
 
-        IfNotAtPlayPositionGoTo((ushort)(19.5 * 50), continueAnimateSprite);
+        sidPlayer.BranchIfNotAtPlaybackPosition(19.5, continueAnimateSprite);
 
         asm.LDA_Imm(irqScene3.LowByte())
             .STA(IRQ_VECTOR)
@@ -374,7 +365,7 @@ public static class Demo
         asm.Label(scene3EndOfFrame)
             .PushAllRegisters();
 
-        PlayMusic();
+        sidPlayer.PlayMusic();
         
         asm.JSR(animateSpriteFunc)
 
@@ -513,8 +504,8 @@ public static class Demo
                 0x80, 0x00, // 7 * 2
             ]);
 
-        asm.Label(musicBuffer)
-            .Append(sidFile.ProgramDataSpan);
+        // SID music buffer
+        sidPlayer.AppendMusicBuffer();
 
         var data = endOfCode - startOfCode;
 
@@ -559,10 +550,8 @@ public static class Demo
         Console.ReadLine();
         
 
-
         await runner.ShutdownAsync();
-
-
+        
 
         //var disassembler = new Mos6502Disassembler(new Mos6502DisassemblerOptions()
         //{
@@ -573,26 +562,6 @@ public static class Demo
 
         //var text = disassembler.Disassemble(asm.Buffer.Slice(0, sizeOfCode));
         //Console.WriteLine(text);
-
-
-        void PlayMusic()
-        {
-            asm.JSR(sidFile.PlayAddress)
-                .INC(zpMusicPosition)
-                .BNE(out var playMusicNoCarry)
-                .INC(zpMusicPosition + 1)
-                .Label(playMusicNoCarry);
-        }
-
-        void IfNotAtPlayPositionGoTo(ushort playPosition, Mos6502Label notAtPosition)
-        {
-            asm.LDA_Imm((byte)(playPosition >> 8))
-                .CMP(zpMusicPosition + 1)
-                .BNE(notAtPosition)
-                .LDA_Imm((byte)playPosition)
-                .CMP(zpMusicPosition)
-                .BNE(notAtPosition);
-        }
     }
 
     private const byte NNNN = 0xA0;
