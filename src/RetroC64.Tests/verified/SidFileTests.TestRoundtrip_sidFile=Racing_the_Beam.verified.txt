@@ -1,0 +1,21 @@
+﻿Format: PSID
+Version: 2
+RawLoadAddress: $0000
+EffectiveLoadAddress: $1000
+InitAddress: $1000
+PlayAddress: $1003
+Songs: 1
+StartSong: 1
+Speed: 0x00000000
+Name: Racing the Beam
+Author: Linus Akesson (lft)
+Released: 2025 LFT
+Flags:
+	DataFormat: BuiltInPlayer
+	PlaySidSpecific: False
+	C64BasicFlag: False
+	Clock: PAL
+	PrimarySidModel: Mos8580
+	SecondarySidModel: Unknown
+	TertiarySidModel: Unknown
+Data Length: 6656 bytes (0x1A00)

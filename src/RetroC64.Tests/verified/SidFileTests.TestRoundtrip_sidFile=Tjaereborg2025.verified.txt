@@ -1,0 +1,21 @@
+﻿Format: PSID
+Version: 2
+RawLoadAddress: $0000
+EffectiveLoadAddress: $0900
+InitAddress: $1000
+PlayAddress: $1003
+Songs: 1
+StartSong: 1
+Speed: 0x00000001
+Name: Tjaereborg2025
+Author: Toni Nisula (Barracuda)
+Released: 2025 Extend
+Flags:
+	DataFormat: BuiltInPlayer
+	PlaySidSpecific: False
+	C64BasicFlag: False
+	Clock: PAL
+	PrimarySidModel: Mos8580
+	SecondarySidModel: Unknown
+	TertiarySidModel: Unknown
+Data Length: 10772 bytes (0x2A14)

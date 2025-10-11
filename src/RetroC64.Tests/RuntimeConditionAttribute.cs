@@ -26,17 +26,9 @@ public sealed class RuntimeConditionAttribute : ConditionBaseAttribute
     }
 
     /// <summary>
-    /// Gets a value indicating whether the test should run on the current runtime identifier.
-    /// </summary>
-    public override bool ShouldRun => _rids.Contains(RuntimeInformation.RuntimeIdentifier, StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Gets the message to display when the test is ignored due to an unsupported runtime identifier.
-    /// </summary>
-    public override string? IgnoreMessage { get; }
-
-    /// <summary>
     /// Gets the group name for this condition.
     /// </summary>
     public override string GroupName => "RIDCondition";
+
+    public override bool IsConditionMet => _rids.Contains(RuntimeInformation.RuntimeIdentifier, StringComparer.OrdinalIgnoreCase);
 }

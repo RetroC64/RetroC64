@@ -1,0 +1,21 @@
+﻿Format: PSID
+Version: 2
+RawLoadAddress: $0000
+EffectiveLoadAddress: $B000
+InitAddress: $BE00
+PlayAddress: $BE20
+Songs: 2
+StartSong: 1
+Speed: 0x00000000
+Name: Sanxion
+Author: Rob Hubbard
+Released: 1986 Thalamus
+Flags:
+	DataFormat: BuiltInPlayer
+	PlaySidSpecific: False
+	C64BasicFlag: False
+	Clock: PAL
+	PrimarySidModel: Mos6581
+	SecondarySidModel: Unknown
+	TertiarySidModel: Unknown
+Data Length: 7488 bytes (0x1D40)

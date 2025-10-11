@@ -3,137 +3,14 @@
 // See license.txt file in the project root for full license information.
 
 // ReSharper disable InconsistentNaming
+
+using System.Buffers;
+
 namespace RetroC64.Music;
 
 using System;
 using System.Buffers.Binary;
 using System.Text;
-
-/// <summary>
-/// Identifies the SID header format used by a file.
-/// </summary>
-public enum SidFormat
-{
-    /// <summary>
-    /// The PlaySID/PSID header format.
-    /// </summary>
-    PSID,
-
-    /// <summary>
-    /// The Real C64 (RSID) header format.
-    /// </summary>
-    RSID
-}
-
-/// <summary>
-/// Describes the type of data contained in the SID file's C64 data segment.
-/// </summary>
-public enum SidDataFormat
-{
-    /// <summary>
-    /// The data segment contains a built-in machine code player (typical for PSID).
-    /// </summary>
-    BuiltInPlayer,
-
-    /// <summary>
-    /// The data segment contains a Compute!'s Sidplayer MUS data stream.
-    /// </summary>
-    ComputeSidPlayerMus
-}
-
-/// <summary>
-/// Enumerates the target clock system a tune was authored for.
-/// </summary>
-public enum SidClock
-{
-    /// <summary>
-    /// No specific clock declared.
-    /// </summary>
-    Unknown = 0,
-
-    /// <summary>
-    /// PAL clock (50 Hz).
-    /// </summary>
-    PAL = 1,
-
-    /// <summary>
-    /// NTSC clock (60 Hz).
-    /// </summary>
-    NTSC = 2,
-
-    /// <summary>
-    /// The tune supports both PAL and NTSC.
-    /// </summary>
-    PalAndNtsc = 3
-}
-
-/// <summary>
-/// Indicates the preferred SID chip model for playback.
-/// </summary>
-public enum SidModelPreference
-{
-    /// <summary>
-    /// No specific model declared.
-    /// </summary>
-    Unknown = 0,
-
-    /// <summary>
-    /// MOS 6581 (old) SID.
-    /// </summary>
-    Mos6581 = 1,
-
-    /// <summary>
-    /// MOS 8580 (new) SID.
-    /// </summary>
-    Mos8580 = 2,
-
-    /// <summary>
-    /// Either model is acceptable.
-    /// </summary>
-    Either = 3
-}
-
-/// <summary>
-/// Decoded flags from a V2+ SID header, describing data format, player and playback preferences.
-/// </summary>
-/// <param name="DataFormat">The type of C64 data (built-in player or Sidplayer MUS).</param>
-/// <param name="PlaySidSpecific">When <see langword="true"/>, the tune expects a PlaySID-specific player (PSID only).</param>
-/// <param name="C64BasicFlag">When <see langword="true"/>, the tune starts via BASIC (RSID only).</param>
-/// <param name="Clock">The target clock system (PAL/NTSC/both).</param>
-/// <param name="PrimarySidModel">Primary SID model preference.</param>
-/// <param name="SecondarySidModel">Secondary SID model preference (V3+; falls back to primary if unspecified).</param>
-/// <param name="TertiarySidModel">Tertiary SID model preference (V4+; falls back to primary if unspecified).</param>
-public sealed record SidFlags(
-                SidDataFormat DataFormat,
-                bool PlaySidSpecific,
-                bool C64BasicFlag,
-                SidClock Clock,
-                SidModelPreference PrimarySidModel,
-                SidModelPreference SecondarySidModel,
-                SidModelPreference TertiarySidModel);
-
-/// <summary>
-/// Represents relocation information for a SID tune, including the starting page and the length of the relocation
-/// window.
-/// </summary>
-/// <param name="StartPage">The starting memory page for relocation. A value of 0 indicates no relocation is necessary; 0xFF indicates
-/// relocation is impossible.</param>
-/// <param name="PageLength">The length, in pages, of the relocation window. A value of 0 indicates no relocation window is present.</param>
-public readonly record struct SidRelocationInfo(byte StartPage, byte PageLength)
-{
-    /// <summary>
-    /// Gets a value indicating whether no relocation is necessary (clean).
-    /// </summary>
-    public bool IsClean => StartPage == 0;
-    /// <summary>
-    /// Gets a value indicating whether relocation is impossible for this tune.
-    /// </summary>
-    public bool IsRelocationImpossible => StartPage == 0xFF;
-    /// <summary>
-    /// Gets a value indicating whether a relocation window is present.
-    /// </summary>
-    public bool HasRelocationWindow => !IsClean && !IsRelocationImpossible && PageLength != 0;
-}
 
 /// <summary>
 /// Represents a SID file and exposes its header fields, flags, and C64 data segment.
@@ -149,167 +26,191 @@ public sealed class SidFile
     private const int HeaderLengthV1 = 0x76;
     private const int HeaderLengthV2Plus = 0x7C;
 
-    private readonly byte[] _fileBytes;
-    private readonly int _dataOffset;
-
-    private SidFile(
-        byte[] fileBytes,
-        int dataOffset,
-        SidFormat format,
-        ushort version,
-        ushort rawLoadAddress,
-        ushort effectiveLoadAddress,
-        ushort initAddress,
-        ushort playAddress,
-        ushort songs,
-        ushort startSong,
-        uint speed,
-        string name,
-        string author,
-        string released,
-        SidFlags? flags,
-        SidRelocationInfo relocation,
-        ushort? secondSidBaseAddress,
-        ushort? thirdSidBaseAddress)
+    /// <summary>
+    /// Initializes a new instance of the SidFile class with default values.
+    /// </summary>
+    /// <remarks>This constructor sets the Version to 2, Format to PSID, and initializes string properties to
+    /// empty strings. The AdditionalHeaderData and Data collections are initialized as empty arrays.</remarks>
+    public SidFile()
     {
-        _fileBytes = fileBytes;
-        _dataOffset = dataOffset;
-        Format = format;
-        Version = version;
-        RawLoadAddress = rawLoadAddress;
-        EffectiveLoadAddress = effectiveLoadAddress;
-        InitAddress = initAddress;
-        PlayAddress = playAddress;
-        Songs = songs;
-        StartSong = startSong;
-        Speed = speed;
-        Name = name;
-        Author = author;
-        Released = released;
-        Flags = flags;
-        Relocation = relocation;
-        SecondSidBaseAddress = secondSidBaseAddress;
-        ThirdSidBaseAddress = thirdSidBaseAddress;
+        Version = 2;
+        Format = SidFormat.PSID;
+        Name = string.Empty;
+        Author = string.Empty;
+        Released = string.Empty;
+        AdditionalHeaderData = [];
+        Data = [];
     }
 
     /// <summary>
     /// Gets the SID file format (PSID or RSID).
     /// </summary>
-    public SidFormat Format { get; }
+    public SidFormat Format { get; set; }
 
     /// <summary>
     /// Gets the SID header version (1 to 4).
     /// </summary>
-    public ushort Version { get; }
+    public ushort Version { get; set; }
 
     /// <summary>
     /// Gets the raw load address from the header. A value of 0 indicates that
     /// the load address is embedded in the data segment.
     /// </summary>
-    public ushort RawLoadAddress { get; }
+    public ushort RawLoadAddress { get; set; }
 
     /// <summary>
     /// Gets the effective load address used for the program data. If the header
     /// specifies 0, this is read from the first two bytes of the data segment.
     /// </summary>
-    public ushort EffectiveLoadAddress { get; }
+    public ushort EffectiveLoadAddress { get; set; }
 
     /// <summary>
     /// Gets the address of the initialization routine.
     /// </summary>
-    public ushort InitAddress { get; }
+    public ushort InitAddress { get; set; }
 
     /// <summary>
     /// Gets the address of the play routine. RSID files must specify 0.
     /// </summary>
-    public ushort PlayAddress { get; }
+    public ushort PlayAddress { get; set; }
 
     /// <summary>
     /// Gets the number of available songs (subtunes).
     /// </summary>
-    public ushort Songs { get; }
+    public ushort Songs { get; set; }
 
     /// <summary>
     /// Gets the 1-based index of the default start song.
     /// </summary>
-    public ushort StartSong { get; }
+    public ushort StartSong { get; set; }
 
     /// <summary>
     /// Gets the speed bitfield. For PSID, bit-per-song flags indicate CIA/IRQ playback;
     /// for RSID this value must be 0.
     /// </summary>
-    public uint Speed { get; }
+    public uint Speed { get; set; }
 
     /// <summary>
     /// Gets the tune title.
     /// </summary>
-    public string Name { get; }
+    public string Name { get; set; }
 
     /// <summary>
     /// Gets the tune author.
     /// </summary>
-    public string Author { get; }
+    public string Author { get; set; }
 
     /// <summary>
     /// Gets the release information (e.g., copyright or group).
     /// </summary>
-    public string Released { get; }
+    public string Released { get; set; }
 
     /// <summary>
     /// Gets the optional decoded flags present in V2+ headers; <see langword="null"/> for V1.
     /// </summary>
-    public SidFlags? Flags { get; }
+    public SidFlags? Flags { get; set; }
 
     /// <summary>
     /// Gets the relocation window information.
     /// </summary>
-    public SidRelocationInfo Relocation { get; }
+    public SidRelocationInfo Relocation { get; set; }
 
     /// <summary>
     /// Gets the optional base address of a second SID chip (V3+), if any.
     /// </summary>
-    public ushort? SecondSidBaseAddress { get; }
+    public ushort? SecondSidBaseAddress { get; set; }
 
     /// <summary>
     /// Gets the optional base address of a third SID chip (V4+), if any.
     /// </summary>
-    public ushort? ThirdSidBaseAddress { get; }
+    public ushort? ThirdSidBaseAddress { get; set; }
 
     /// <summary>
-    /// Gets a value indicating whether the file embeds the load address in the data segment.
+    /// Gets a value indicating whether the file embeds the load address in the final data segment.
     /// </summary>
     public bool HasEmbeddedLoadAddress => RawLoadAddress == 0;
 
     /// <summary>
-    /// Gets the raw file bytes.
+    /// Gets or sets the data between the end of the SID header and the start of the SID data segment.
     /// </summary>
-    public ReadOnlySpan<byte> RawFileSpan => _fileBytes;
+    /// <remarks>
+    /// This data is typically unused and should be empty, but some files may include additional data.
+    /// </remarks>
+    public byte[] AdditionalHeaderData { get; set; }
 
     /// <summary>
-    /// Gets the data span, including the embedded load address if present.
+    /// Gets or sets the SID data segment, excluding any embedded load address.
     /// </summary>
-    public ReadOnlySpan<byte> DataSpan => _fileBytes.AsSpan(_dataOffset);
+    public byte[] Data { get; set; }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        using var writer = new StringWriter();
+        DumpHeaderTo(writer);
+        return writer.ToString();
+    }
 
     /// <summary>
-    /// Gets the program data span, excluding the embedded load address if present.
+    /// Writes a formatted summary of the header information to the specified text writer.
     /// </summary>
-    public ReadOnlySpan<byte> ProgramDataSpan => HasEmbeddedLoadAddress ? DataSpan[2..] : DataSpan;
+    /// <remarks>The output includes all primary header fields, as well as optional flag and relocation
+    /// details if present. This method is typically used for debugging or diagnostic purposes to inspect the contents
+    /// of the header in a human-readable format.</remarks>
+    /// <param name="writer">The <see cref="TextWriter"/> to which the header information will be written. Cannot be null.</param>
+    public void DumpHeaderTo(TextWriter writer)
+    {
+        writer.WriteLine($"Format: {Format}");
+        writer.WriteLine($"Version: {Version}");
+        writer.WriteLine($"RawLoadAddress: ${RawLoadAddress:X4}");
+        writer.WriteLine($"EffectiveLoadAddress: ${EffectiveLoadAddress:X4}");
+        writer.WriteLine($"InitAddress: ${InitAddress:X4}");
+        writer.WriteLine($"PlayAddress: ${PlayAddress:X4}");
+        writer.WriteLine($"Songs: {Songs}");
+        writer.WriteLine($"StartSong: {StartSong}");
+        writer.WriteLine($"Speed: 0x{Speed:X8}");
+        writer.WriteLine($"Name: {Name}");
+        writer.WriteLine($"Author: {Author}");
+        writer.WriteLine($"Released: {Released}");
+        if (Flags is not null)
+        {
+            writer.WriteLine("Flags:");
+            writer.WriteLine($"\tDataFormat: {Flags.DataFormat}");
+            writer.WriteLine($"\tPlaySidSpecific: {Flags.PlaySidSpecific}");
+            writer.WriteLine($"\tC64BasicFlag: {Flags.C64BasicFlag}");
+            writer.WriteLine($"\tClock: {Flags.Clock}");
+            writer.WriteLine($"\tPrimarySidModel: {Flags.PrimarySidModel}");
+            writer.WriteLine($"\tSecondarySidModel: {Flags.SecondarySidModel}");
+            writer.WriteLine($"\tTertiarySidModel: {Flags.TertiarySidModel}");
+        }
+        if (Relocation.HasRelocationWindow)
+        {
+            writer.WriteLine("Relocation:");
+            writer.WriteLine($"\tStartPage: 0x{Relocation.StartPage:X2}");
+            writer.WriteLine($"\tPageLength: 0x{Relocation.PageLength:X2}");
+        }
+        if (SecondSidBaseAddress.HasValue)
+            writer.WriteLine($"SecondSidBaseAddress: ${SecondSidBaseAddress.Value:X4}");
+        if (ThirdSidBaseAddress.HasValue)
+            writer.WriteLine($"ThirdSidBaseAddress: ${ThirdSidBaseAddress.Value:X4}");
+        if (AdditionalHeaderData.Length != 0)
+            writer.WriteLine($"AdditionalHeaderData Length: {AdditionalHeaderData.Length} bytes");
 
+        writer.WriteLine($"Data Length: {Data.Length} bytes (0x{Data.Length:X2})");
+    }
+    
     /// <summary>
     /// Parses a SID file from a raw byte array and returns a structured representation.
     /// </summary>
-    /// <param name="sidFile">The raw SID file bytes.</param>
+    /// <param name="sidFileRawData">The raw SID file bytes.</param>
     /// <returns>A <see cref="SidFile"/> instance exposing header fields and data.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sidFile"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sidFileRawData"/> is <see langword="null"/>.</exception>
     /// <exception cref="FormatException">Thrown when the data does not conform to the SID specification.</exception>
-    public static SidFile FromBytes(byte[] sidFile)
+    public static SidFile Load(ReadOnlySpan<byte> sidFileRawData)
     {
-        if (sidFile is null)
-            throw new ArgumentNullException(nameof(sidFile));
-
-        var span = sidFile.AsSpan();
+        var span = sidFileRawData;
         if (span.Length < HeaderLengthV1)
-            throw new FormatException("SID file is smaller than the minimal header.");
+            throw new FormatException($"SID file length {span.Length} cannot be smaller than the minimal header {HeaderLengthV1}.");
 
         // +00    magicID: 'PSID' or 'RSID'
         ref readonly byte magic0 = ref span[0];
@@ -370,18 +271,13 @@ public sealed class SidFile
         {
             // +76    WORD flags
             ushort rawFlags = ReadUInt16BE(span, 0x76);
-            SidDataFormat dataFormat = (rawFlags & 0b1) != 0 ? SidDataFormat.ComputeSidPlayerMus : SidDataFormat.BuiltInPlayer;
+            SidDataFormat dataFormat = (rawFlags & 0b1) != 0 ? SidDataFormat.ComputeSidPlayerMUS : SidDataFormat.BuiltInPlayer;
             bool playSidSpecific = format == SidFormat.PSID && ((rawFlags & 0b10) != 0);
             bool c64BasicFlag = format == SidFormat.RSID && ((rawFlags & 0b10) != 0);
             SidClock clock = (SidClock)((rawFlags >> 2) & 0b11);
             SidModelPreference primary = (SidModelPreference)((rawFlags >> 4) & 0b11);
             SidModelPreference secondary = version >= 3 ? (SidModelPreference)((rawFlags >> 6) & 0b11) : SidModelPreference.Unknown;
             SidModelPreference tertiary = version >= 4 ? (SidModelPreference)((rawFlags >> 8) & 0b11) : SidModelPreference.Unknown;
-
-            if (secondary == SidModelPreference.Unknown)
-                secondary = primary;
-            if (tertiary == SidModelPreference.Unknown)
-                tertiary = primary;
 
             flags = new SidFlags(dataFormat, playSidSpecific, c64BasicFlag, clock, primary, secondary, tertiary);
 
@@ -415,39 +311,161 @@ public sealed class SidFile
             if (dataSpan.Length < 2)
                 throw new FormatException("Missing embedded load address in C64 data segment.");
             effectiveLoadAddress = BinaryPrimitives.ReadUInt16LittleEndian(dataSpan[..2]);
+            dataSpan = dataSpan[2..];
         }
 
+        // Additional data between the header and the data segment
+        var additionalHeaderSpan = span.Slice(minHeader, dataOffset - minHeader);
+        
         if (format == SidFormat.RSID)
             ValidateRsid(version, loadAddress, playAddress, speed, effectiveLoadAddress, initAddress, flags);
 
-        return new SidFile(
-            sidFile,
-            dataOffset,
-            format,
-            version,
-            loadAddress,
-            effectiveLoadAddress,
-            initAddress,
-            playAddress,
-            songs,
-            startSong,
-            speed,
-            name,
-            author,
-            released,
-            flags,
-            relocation,
-            secondSid,
-            thirdSid);
+        var sidFile = new SidFile()
+        {
+            Format = format,
+            Version = version,
+            RawLoadAddress = loadAddress,
+            EffectiveLoadAddress = effectiveLoadAddress,
+            InitAddress = initAddress,
+            PlayAddress = playAddress,
+            Songs = songs,
+            StartSong = startSong,
+            Speed = speed,
+            Name = name,
+            Author = author,
+            Released = released,
+            Flags = flags,
+            Relocation = relocation,
+            SecondSidBaseAddress = secondSid,
+            ThirdSidBaseAddress = thirdSid,
+            AdditionalHeaderData = additionalHeaderSpan.ToArray(),
+            Data = dataSpan.ToArray()
+        };
+
+        return sidFile;
     }
 
-    private static ushort? DecodeSidAddress(byte value)
+    /// <summary>
+    /// Writes the current data to the specified stream.
+    /// </summary>
+    /// <param name="stream">The stream to which the data will be written. Cannot be null and must be writable.</param>
+    public void Save(Stream stream)
     {
-        if (value == 0 || (value & 0b1) != 0)
-            return null!;
-        if (value < 0x42 || (value >= 0x80 && value <= 0xDF) || value > 0xFE)
-            return null!;
-        return (ushort)(0xD000 | (value << 4));
+        if (Songs == 0)
+            throw new InvalidOperationException("Cannot apply changes to SID file with zero songs.");
+
+        if (StartSong == 0 || StartSong > Songs)
+            StartSong = 1;
+
+        if (Format == SidFormat.RSID)
+            ValidateRsid(Version, RawLoadAddress, PlayAddress, Speed, EffectiveLoadAddress, InitAddress, Flags);
+
+        if (Version < 1 || Version > 4)
+            throw new InvalidOperationException("SID header version must be between 1 and 4.");
+
+        if (Version < 2 && (Flags is not null || Relocation.HasRelocationWindow || SecondSidBaseAddress.HasValue || ThirdSidBaseAddress.HasValue))
+            throw new InvalidOperationException("Cannot set flags, relocation or multiple SID addresses on a version 1 SID file.");
+
+        if (Version < 3 && SecondSidBaseAddress.HasValue)
+            throw new InvalidOperationException("Cannot set a second SID address on a version 1 or 2 SID file.");
+
+        if (SecondSidBaseAddress.HasValue)
+        {
+            VerifySidAddress(SecondSidBaseAddress, "Second SID");
+        }
+
+        if (Version < 4 && ThirdSidBaseAddress.HasValue)
+            throw new InvalidOperationException("Cannot set a third SID address on a version 1, 2 or 3 SID file.");
+
+        if (ThirdSidBaseAddress.HasValue)
+        {
+            VerifySidAddress(ThirdSidBaseAddress, "Third SID");
+        }
+
+        if (SecondSidBaseAddress.HasValue && ThirdSidBaseAddress.HasValue && SecondSidBaseAddress.Value == ThirdSidBaseAddress.Value)
+            throw new InvalidOperationException("Second and third SID base addresses must differ.");
+        
+        var headerSize = ComputeHeaderLength(Version);
+        var dataOffset = headerSize + AdditionalHeaderData.Length;
+        var length = dataOffset + Data.Length + (RawLoadAddress == 0 ? 2 : 0);
+        var buffer = ArrayPool<byte>.Shared.Rent(length);
+        var span = buffer.AsSpan(0, length);
+
+        // rawData might include the 2 bytes of load address
+        var rawData = span[dataOffset..];
+        AdditionalHeaderData.AsSpan().CopyTo(span[headerSize..]);
+        Data.AsSpan().CopyTo(rawData[(RawLoadAddress == 0 ? 2 : 0)..]);
+
+        if (RawLoadAddress == 0)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(rawData[..2], EffectiveLoadAddress);
+        }
+        
+        // Clear the header area
+        span[..headerSize].Clear();
+
+        // +00    magicID: 'PSID' or 'RSID'
+        WriteUInt32BE(span, 0x00, Format == SidFormat.PSID ? 0x50534944U : 0x52534944U);
+        // +04    WORD version
+        WriteUInt16BE(span, 0x04, Version);
+        // +06    WORD dataOffset
+        WriteUInt16BE(span, 0x06, (ushort)dataOffset);
+        // +08    WORD loadAddress
+        WriteUInt16BE(span, 0x08, RawLoadAddress);
+        // +0A    WORD initAddress
+        WriteUInt16BE(span, 0x0A, InitAddress);
+        // +0C    WORD playAddress
+        WriteUInt16BE(span, 0x0C, PlayAddress);
+        // +0E    WORD songs
+        WriteUInt16BE(span, 0x0E, Songs);
+        // +10    WORD startSong
+        WriteUInt16BE(span, 0x10, StartSong);
+        // +12    LONGWORD speed
+        WriteUInt32BE(span, 0x12, Speed);
+        // +16    ``<name>''
+        WriteText(span.Slice(0x16, 0x20), Name);
+        // +36    ``<author>''
+        WriteText(span.Slice(0x36, 0x20), Author);
+        // +56    ``<released>'' (once known as ``<copyright>'')
+        WriteText(span.Slice(0x56, 0x20), Released);
+
+        if (Version >= 2)
+        {
+            ushort rawFlags = 0;
+            if (Flags is not null)
+            {
+                if (Flags.DataFormat == SidDataFormat.ComputeSidPlayerMUS)
+                    rawFlags |= 0b1;
+                if (Flags.PlaySidSpecific && Format == SidFormat.PSID)
+                    rawFlags |= 0b10;
+                if (Flags.C64BasicFlag && Format == SidFormat.RSID)
+                    rawFlags |= 0b10;
+                rawFlags |= (ushort)(((int)Flags.Clock & 0b11) << 2);
+                rawFlags |= (ushort)(((int)Flags.PrimarySidModel & 0b11) << 4);
+                rawFlags |= (ushort)(((int)Flags.SecondarySidModel & 0b11) << 6);
+                rawFlags |= (ushort)(((int)Flags.TertiarySidModel & 0b11) << 8);
+            }
+
+            // +76    WORD flags
+            WriteUInt16BE(span, 0x76, rawFlags);
+
+            // +78    BYTE startPage (relocStartPage)
+            span[0x78] = Relocation.StartPage;
+
+            // +79    BYTE pageLength (relocPages)
+            span[0x79] = Relocation.PageLength;
+
+            // +7A    BYTE secondSIDAddress
+            if (Version >= 3)
+                span[0x7A] = EncodeSidAddress(SecondSidBaseAddress);
+
+            // +7B    BYTE thirdSIDAddress
+            if (Version >= 4)
+                span[0x7B] = EncodeSidAddress(ThirdSidBaseAddress);
+        }
+
+        stream.Write(span);
+        ArrayPool<byte>.Shared.Return(buffer);
     }
 
     private static void ValidateRsid(
@@ -491,5 +509,36 @@ public sealed class SidFile
         int terminator = span.IndexOf((byte)0);
         var slice = terminator >= 0 ? span[..terminator] : span;
         return slice.Length == 0 ? string.Empty : Encoding.ASCII.GetString(slice);
+    }
+
+    private static int ComputeHeaderLength(ushort version) => version == 1 ? HeaderLengthV1 : HeaderLengthV2Plus;
+
+    private static void WriteUInt16BE(Span<byte> buffer, int offset, ushort value) =>
+        BinaryPrimitives.WriteUInt16BigEndian(buffer.Slice(offset, 2), value);
+
+    private static void WriteUInt32BE(Span<byte> buffer, int offset, uint value) =>
+        BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(offset, 4), value);
+
+    private static void WriteText(Span<byte> span, string text)
+    {
+        Encoding.ASCII.GetBytes(text, span);
+    }
+    private static ushort? DecodeSidAddress(byte value)
+    {
+        if (value == 0 || (value & 0b1) != 0)
+            return null!;
+        if (value < 0x42 || (value >= 0x80 && value <= 0xDF) || value > 0xFE)
+            return null!;
+        return (ushort)(0xD000 | (value << 4));
+    }
+
+    private byte EncodeSidAddress(ushort? address) => address is null ? (byte)0 : (byte)((address.Value & 0x0FF0) >> 4);
+
+    private void VerifySidAddress(ushort? address, string name)
+    {
+        if (address is null)
+            return;
+        if (address < 0xD400 || address > 0xDFFF || (address & 0x000F) != 0)
+            throw new InvalidOperationException($"{name} base address must be between $D400 and $DFFF and aligned on a 16-byte boundary.");
     }
 }
