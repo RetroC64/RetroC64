@@ -21,7 +21,7 @@ using System.Text;
 ///
 /// This is following the SID file format as documented at: https://gist.github.com/cbmeeks/2b107f0a8d36fc461ebb056e94b2f4d6
 /// </remarks>
-public sealed class SidFile
+public class SidFile
 {
     private const int HeaderLengthV1 = 0x76;
     private const int HeaderLengthV2Plus = 0x7C;
@@ -63,6 +63,13 @@ public sealed class SidFile
     /// specifies 0, this is read from the first two bytes of the data segment.
     /// </summary>
     public ushort EffectiveLoadAddress { get; set; }
+
+    /// <summary>
+    /// Gets the load address used for the current operation.
+    /// </summary>
+    /// <remarks>If the <see cref="RawLoadAddress"/> is not set, the <see cref="EffectiveLoadAddress"/> is used instead. This property
+    /// provides the address at which data should be loaded or interpreted, depending on the context.</remarks>
+    public ushort LoadAddress => RawLoadAddress != 0 ? RawLoadAddress : EffectiveLoadAddress;
 
     /// <summary>
     /// Gets the address of the initialization routine.
@@ -152,6 +159,69 @@ public sealed class SidFile
     }
 
     /// <summary>
+    /// Gets a value indicating whether the additional header data contains zero-page addresses.
+    /// </summary>
+    public bool HasZeroPageAddresses
+    {
+        get
+        {
+            if (AdditionalHeaderData.Length < 4)
+                return false;
+            var buffer = AdditionalHeaderData;
+            return buffer.AsSpan(0, 4).SequenceEqual("RC64"u8);
+        }
+    }
+    
+    /// <summary>
+    /// Attempts to retrieve zero-page addresses from the additional header data.
+    /// </summary>
+    /// <remarks>The method checks for a specific header signature and version in the additional header data
+    /// before extracting the zero-page addresses. The header must start with the sequence "RC64" followed by a version
+    /// byte of 1.</remarks>
+    /// <param name="zpAddresses">When this method returns, contains the zero-page addresses extracted from the additional header data, if the
+    /// operation was successful; otherwise, it is an empty array.</param>
+    /// <returns><see langword="true"/> if the zero-page addresses were successfully retrieved; otherwise, <see
+    /// langword="false"/>.</returns>
+    public bool TryGetZeroPageAddresses(out byte[] zpAddresses)
+    {
+        zpAddresses = [];
+        if (AdditionalHeaderData.Length < 5)
+            return false;
+        var buffer = AdditionalHeaderData;
+        if (!buffer.AsSpan(0, 4).SequenceEqual("RC64"u8))
+            return false;
+        // Version byte is at buffer[4], currently unused
+        if (buffer[4] != 1)
+            return false;
+        var length = buffer[5];
+        zpAddresses = new byte[length];
+        buffer.AsSpan(6).CopyTo(zpAddresses);
+        return true;
+    }
+
+    /// <summary>
+    /// Sets the zero-page addresses for the current instance.
+    /// </summary>
+    /// <remarks>The zero-page addresses are stored in a buffer with a specific format, including a signature
+    /// and version byte.</remarks>
+    /// <param name="zpAddresses">A read-only span of bytes representing the zero-page addresses to be set. The length of this span must not
+    /// exceed 255 bytes.</param>
+    /// <exception cref="ArgumentException">Thrown if the length of <paramref name="zpAddresses"/> exceeds 255 bytes.</exception>
+    public void SetZeroPageAddresses(ReadOnlySpan<byte> zpAddresses)
+    {
+        if (zpAddresses.Length > 255)
+            throw new ArgumentException("Zero-page addresses length cannot exceed 255 bytes.", nameof(zpAddresses));
+        var buffer = new byte[4 + 1 + 1 + zpAddresses.Length];
+        // First 4 bytes is the RC64 signature
+        "RC64"u8.CopyTo(buffer);
+        // Version byte
+        buffer[4] = 1;
+        buffer[5] = (byte)zpAddresses.Length;
+        zpAddresses.CopyTo(buffer.AsSpan(6));
+        AdditionalHeaderData = buffer;
+    }
+    
+    /// <summary>
     /// Writes a formatted summary of the header information to the specified text writer.
     /// </summary>
     /// <remarks>The output includes all primary header fields, as well as optional flag and relocation
@@ -197,6 +267,18 @@ public sealed class SidFile
             writer.WriteLine($"AdditionalHeaderData Length: {AdditionalHeaderData.Length} bytes");
 
         writer.WriteLine($"Data Length: {Data.Length} bytes (0x{Data.Length:X2})");
+    }
+
+    /// <summary>
+    /// Loads a SID file from the specified file path.
+    /// </summary>
+    /// <param name="filePath">The path to the SID file to be loaded. Cannot be <see langword="null"/>.</param>
+    /// <returns>A <see cref="SidFile"/> object representing the loaded SID file.</returns>
+    public static SidFile Load(string filePath)
+    {
+        ArgumentNullException.ThrowIfNull(filePath);
+        var rawData = File.ReadAllBytes(filePath);
+        return Load(rawData);
     }
     
     /// <summary>
@@ -346,6 +428,16 @@ public sealed class SidFile
     }
 
     /// <summary>
+    /// Saves the current data to the specified file path.
+    /// </summary>
+    /// <param name="filePath">The path of the file to which the data will be saved. Cannot be null or empty.</param>
+    public void Save(string filePath)
+    {
+        using var stream = File.Create(filePath);
+        Save(stream);
+    }
+
+    /// <summary>
     /// Writes the current data to the specified stream.
     /// </summary>
     /// <param name="stream">The stream to which the data will be written. Cannot be null and must be writable.</param>
@@ -487,10 +579,15 @@ public sealed class SidFile
             throw new FormatException("RSID files must set speed to zero.");
         if (effectiveLoadAddress < 0x07E8)
             throw new FormatException("RSID files must not load below $07E8.");
-        if (IsRomOrReserved(initAddress))
+        if (flags?.C64BasicFlag == true)
+        {
+            if (initAddress != 0)
+            {
+                throw new FormatException("RSID files with BASIC flag set must provide initAddress=0.");
+            }
+        }
+        else if (IsRomOrReserved(initAddress))
             throw new FormatException("RSID init address must reside in RAM and outside ROM areas.");
-        if (flags?.C64BasicFlag == true && initAddress != 0)
-            throw new FormatException("RSID files with BASIC flag set must provide initAddress=0.");
     }
 
     private static bool IsRomOrReserved(ushort address) =>

@@ -29,6 +29,35 @@ public class SidFileTests : VerifyBase
     }
 
 
+
+    [TestMethod]
+    public void TestRelocator()
+    {
+        var sid = SidFile.Load(File.ReadAllBytes(Path.Combine(SidFileFolder, "Sanxion.sid")));
+
+        var relocator = new SidRelocator();
+        var newSidFile = relocator.Relocate(sid, new SidRelocationConfig()
+        {
+            //ZpRelocate = false
+        });
+        Assert.IsNotNull(newSidFile);
+
+        var stream = new MemoryStream();
+        newSidFile.Save(stream);
+        var newSidBytes = stream.ToArray();
+
+        var reloadedSid = SidFile.Load(newSidBytes);
+
+        Assert.IsTrue(reloadedSid.TryGetZeroPageAddresses(out var zpAddresses));
+        var expectedValues = new byte[] { 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c };
+
+        var actual = string.Join(", ", zpAddresses.Select(x => $"${x:x2}"));
+        var expected = string.Join(", ", expectedValues.Select(x => $"${x:x2}"));
+        
+        Assert.AreEqual(expected, actual, "Mismatch while recovering zero-page addresses");
+        //newSidFile.Save(Path.Combine(AppContext.BaseDirectory, "Sanxion_relocated.sid"));
+    }
+    
     private static void AssertEqualNice(Span<byte> expected, Span<byte> actual, string message)
     {
         if (expected.SequenceEqual(actual)) return;

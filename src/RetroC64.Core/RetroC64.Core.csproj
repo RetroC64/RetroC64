@@ -17,6 +17,10 @@
     <PackageReference Include="Asm6502" />
     <PackageReference Include="SkiaSharp" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!--<ProjectReference Include="..\..\..\..\Asm6502\src\Asm6502\Asm6502.csproj" />-->
+  </ItemGroup>
   
 
 </Project>
