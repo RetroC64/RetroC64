@@ -30,7 +30,7 @@ public class ViceMonitorTests
             Assert.IsTrue(response is RegistersAvailableResponse);
 
             var registerResponse = (RegistersAvailableResponse)response;
-            Assert.IsTrue(registerResponse.Registers.Length > 0, "No registers found");
+            Assert.IsGreaterThan(registerResponse.Registers.Length, 0, "No registers found");
             Assert.IsTrue(registerResponse.Registers.Any(r => r.Name == "A"), "No A register found");
             Console.WriteLine(response);
         }
@@ -49,8 +49,8 @@ public class ViceMonitorTests
             var response = await runner.Monitor.SendCommandAsync(new DisplayGetCommand());
             Assert.IsTrue(response is DisplayGetResponse);
             var displayResponse = (DisplayGetResponse)response;
-            Assert.IsTrue(displayResponse.Width > 0, "Display width is zero");
-            Assert.IsTrue(displayResponse.Height > 0, "Display height is zero");
+            Assert.IsGreaterThan(0, displayResponse.Width, "Display width is zero");
+            Assert.IsGreaterThan(0, displayResponse.Height, "Display height is zero");
             Console.WriteLine(response);
         }
 
@@ -66,7 +66,7 @@ public class ViceMonitorTests
             var response = await runner.Monitor.SendCommandAsync(new PaletteGetCommand());
             Assert.IsTrue(response is PaletteGetResponse);
             var paletteResponse = (PaletteGetResponse)response;
-            Assert.AreEqual(16, paletteResponse.Palette.Length, "Palette does not contain 16 colors");
+            Assert.HasCount(16, paletteResponse.Palette, "Palette does not contain 16 colors");
             Console.WriteLine(response);
         }
 
@@ -84,7 +84,7 @@ public class ViceMonitorTests
             var response = await runner.Monitor.SendCommandAsync(new BanksAvailableCommand());
             Assert.IsTrue(response is BanksAvailableResponse);
             var banksResponse = (BanksAvailableResponse)response;
-            Assert.IsTrue(banksResponse.Banks.Count > 0, "No banks found");
+            Assert.IsNotEmpty(banksResponse.Banks, "No banks found");
             Console.WriteLine(response);
         }
 
@@ -100,7 +100,7 @@ public class ViceMonitorTests
             var response = await runner.Monitor.SendCommandAsync(new MemoryGetCommand() { StartAddress = 0xC000, EndAddress = 0xC001, BankId = new BankId(0), Memspace = MemSpace.MainMemory});
             Assert.IsTrue(response is GenericResponse);
             var memoryResponse = (GenericResponse)response;
-            Assert.AreEqual(4, memoryResponse.Body.Length, "Memory length mismatch ");
+            Assert.HasCount(4, memoryResponse.Body, "Memory length mismatch ");
 
             var span = MemoryMarshal.Cast<byte, ushort>(memoryResponse.Body.AsSpan());
             Assert.AreEqual(2, span[0], "Must be length of 2");

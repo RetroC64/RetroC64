@@ -34,7 +34,7 @@ public class Zx0Tests
 
         byte[] data = [.. b16, .. b16, .. b256Reversed, .. b256Reversed];
         var compressed = zx0Compressor.Compress(data, Zx0CompressionFlags.BitFire);
-        Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
+        Assert.IsLessThan(data.Length, compressed.Length); // Ensure compression happened
 
         var zx0Decompressor = new Zx0Decompressor();
         var decompressed = zx0Decompressor.Decompress(compressed, Zx0CompressionFlags.BitFire, data.Length);
@@ -79,7 +79,7 @@ public class Zx0Tests
         var zx0Compressor = new Zx0Compressor();
         byte[] data = [..Enumerable.Repeat((byte)0, 21)];
         var compressed = zx0Compressor.Compress(data);
-        Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
+        Assert.IsLessThan(data.Length, compressed.Length); // Ensure compression happened
 
         var zx0Decompressor = new Zx0Decompressor();
         var decompressed = zx0Decompressor.Decompress(compressed);
@@ -106,7 +106,7 @@ public class Zx0Tests
         var zx0Compressor = new Zx0Compressor();
         byte[] data = File.ReadAllBytes(path);
         var compressed = zx0Compressor.Compress(data);
-        Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
+        Assert.IsLessThan(data.Length, compressed.Length); // Ensure compression happened
 
         Console.WriteLine($"File {Path.GetFileName(path)} Compressed {compressed.Length} bytes");
 
@@ -122,7 +122,7 @@ public class Zx0Tests
         var zx0Compressor = new Zx0Compressor();
         var data = File.ReadAllBytes(path).AsSpan().Slice(2);
         var compressed = zx0Compressor.Compress(data, Zx0CompressionFlags.BitFire);
-        Assert.IsTrue(compressed.Length < data.Length); // Ensure compression happened
+        Assert.IsLessThan(data.Length, compressed.Length); // Ensure compression happened
 
         Console.WriteLine($"File {Path.GetFileName(path)} Compressed {compressed.Length} bytes");
 

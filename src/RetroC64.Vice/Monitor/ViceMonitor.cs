@@ -73,8 +73,9 @@ public sealed class ViceMonitor : IDisposable
         try
         {
             client.Connect(BinaryMonitorEndPoint);
-        } catch (SocketException ex)
+        } catch (SocketException)
         {
+            // ignore exception
             client.Dispose();
             return false;
         }
