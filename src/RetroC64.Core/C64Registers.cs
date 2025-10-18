@@ -266,7 +266,70 @@ public static class C64Registers
     public const ushort VIC2_SPRITE7_COLOR = 0xD02E;
 
     // SID (Sound Interface Device) Registers
+    public static SidRegisters Sid => default;
 
+    public readonly struct SidRegisters
+    {
+        public SidVoiceRegister this[int index] => new(index);
+
+        public ushort FilterFrequencyLow => SID_FILTER_FREQ_LO;
+
+        public ushort FilterFrequencyHigh => SID_FILTER_FREQ_HI;
+
+        public ushort FilterResonanceAndFlags => SID_FILTER_RES_FILT;
+
+        public ushort FilterModeAndVolume => SID_FILTER_MODE_VOL;
+
+        public ushort PotX => SID_POT_X;
+
+        public ushort PotY => SID_POT_Y;
+
+        public ushort Oscillator3Output => SID_OSC3;
+
+        public ushort Envelope3Output => SID_ENV3;
+    }
+
+    public readonly struct SidVoiceRegister
+    {
+        internal SidVoiceRegister(int voice)
+        {
+            if (voice < 0 || voice > 2) throw new ArgumentOutOfRangeException(nameof(voice), "Voice must be between 0 and 2.");
+            Voice = voice;
+        }
+
+        public int Voice { get; }
+
+        public ushort FrequencyLow => (ushort)(SID_VOICE1_FREQ_LO + Voice * 7);
+
+        public ushort FrequencyHigh => (ushort)(SID_VOICE1_FREQ_HI + Voice * 7);
+
+        public ushort PulseWidthLow => (ushort)(SID_VOICE1_PW_LO + Voice * 7);
+
+        public ushort PulseWidthHigh => (ushort)(SID_VOICE1_PW_HI + Voice * 7);
+
+        public ushort Control => (ushort)(SID_VOICE1_CONTROL + Voice * 7);
+
+        public ushort AttackDecay => (ushort)(SID_VOICE1_ATTACK_DECAY + Voice * 7);
+
+        public ushort SustainRelease => (ushort)(SID_VOICE1_SUSTAIN_RELEASE + Voice * 7);
+
+        public override string ToString() => $"SidVoice[{Voice}] ${SID_VOICE1_FREQ_LO + Voice * 7:x4}";
+    }
+
+
+    [Flags]
+    public enum SidControlFlags : byte
+    {
+        VoiceOn = 0x01,
+        Sync = 0x02,
+        RingModulation = 0x04,
+        Reset = 0x08,
+        TriangleWaveform = 0x10,
+        SawtoothWaveform = 0x20,
+        PulseWaveform = 0x40,
+        NoiseWaveform = 0x80,
+    }
+    
     /// <summary>
     /// $D400-$D401 (54272-54273)
     /// Voice #1 frequency.
