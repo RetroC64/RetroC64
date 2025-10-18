@@ -30,7 +30,7 @@ public class ViceMonitorTests
             Assert.IsTrue(response is RegistersAvailableResponse);
 
             var registerResponse = (RegistersAvailableResponse)response;
-            Assert.IsGreaterThan(registerResponse.Registers.Length, 0, "No registers found");
+            Assert.IsGreaterThan(9, registerResponse.Registers.Length, "No registers found");
             Assert.IsTrue(registerResponse.Registers.Any(r => r.Name == "A"), "No A register found");
             Console.WriteLine(response);
         }
