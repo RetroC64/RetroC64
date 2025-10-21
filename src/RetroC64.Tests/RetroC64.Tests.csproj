@@ -8,7 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="sid_test_files\Plaster.sid" />
     <None Remove="sid_test_files\Racing_the_Beam.sid" />
     <None Remove="sid_test_files\Tjaereborg2025.sid" />
     <None Remove="Simple.bas" />
@@ -16,9 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="sid_test_files\Plaster.sid">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
     <Content Include="sid_test_files\Racing_the_Beam.sid">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -27,20 +27,33 @@ public class SidFileTests : VerifyBase
         settings.UseParameters(Path.GetFileNameWithoutExtension(sidFile));
         await Verify(sid.ToString(), settings);
     }
-
-
+    
 
     [TestMethod]
-    public void TestRelocator()
+    [DynamicData(nameof(GetSidFiles))]
+    public async Task TestRelocator(string sidFile)
     {
-        var sid = SidFile.Load(File.ReadAllBytes(Path.Combine(SidFileFolder, "Sanxion.sid")));
+        var sid = SidFile.Load(File.ReadAllBytes(sidFile));
 
+        var writer = new StringWriter();
         var relocator = new SidRelocator();
-        var newSidFile = relocator.Relocate(sid, new SidRelocationConfig()
+        SidFile? newSidFile = null;
+        try
         {
-            //ZpRelocate = false
-        });
-        Assert.IsNotNull(newSidFile);
+            newSidFile = relocator.Relocate(sid, new SidRelocationConfig()
+            {
+                LogOutput = writer,
+                TestingMode = true,
+                //ZpRelocate = false,
+            });
+            Assert.IsNotNull(newSidFile);
+        }
+        catch (Exception ex)
+        {
+            writer.WriteLine($"Relocation failed: {ex}");
+            Console.WriteLine(writer.ToString());
+            Assert.Fail($"Relocation failed for {sidFile}: {ex.Message}");
+        }
 
         var stream = new MemoryStream();
         newSidFile.Save(stream);
@@ -49,13 +62,21 @@ public class SidFileTests : VerifyBase
         var reloadedSid = SidFile.Load(newSidBytes);
 
         Assert.IsTrue(reloadedSid.TryGetZeroPageAddresses(out var zpAddresses));
-        var expectedValues = new byte[] { 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c };
 
-        var actual = string.Join(", ", zpAddresses.Select(x => $"${x:x2}"));
-        var expected = string.Join(", ", expectedValues.Select(x => $"${x:x2}"));
-        
-        Assert.AreEqual(expected, actual, "Mismatch while recovering zero-page addresses");
-        //newSidFile.Save(Path.Combine(AppContext.BaseDirectory, "Sanxion_relocated.sid"));
+        if (Path.GetFileNameWithoutExtension(sidFile) == "Sanxion")
+        {
+            var expectedValues = new byte[] { 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c };
+
+            var actual = string.Join(", ", zpAddresses.Select(x => $"${x:x2}"));
+            var expected = string.Join(", ", expectedValues.Select(x => $"${x:x2}"));
+
+            Assert.AreEqual(expected, actual, "Mismatch while recovering zero-page addresses");
+        }
+
+        var relocText = writer.ToString();
+        var settings = new VerifySettings();
+        settings.UseParameters(Path.GetFileNameWithoutExtension(sidFile));
+        await Verify(relocText, settings);
     }
     
     private static void AssertEqualNice(Span<byte> expected, Span<byte> actual, string message)

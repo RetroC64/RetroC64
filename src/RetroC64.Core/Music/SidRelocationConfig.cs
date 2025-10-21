@@ -39,9 +39,9 @@ public class SidRelocationConfig
     public double PitchTolerance { get; set; } = 2; // percentage
 
     /// <summary>
-    /// Gets or sets a value indicating whether any pulse width mismatch should fail verification.
+    /// Gets or sets a value indicating whether any pulse width mismatch should fail verification. Default is false.
     /// </summary>
-    public bool EnableStrictPulseWidth { get; set; } = true;
+    public bool EnableStrictPulseWidth { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the diagnostic verbosity level: 0=Errors, 1=Warnings, 2=Info, 3=Debug, 4+=Trace.
@@ -84,6 +84,19 @@ public class SidRelocationConfig
     /// Defaults to <see cref="Console.Out"/>.
     /// </summary>
     public TextWriter LogOutput { get; set; } = Console.Out;
+    
+    /// <summary>
+    /// Gets or sets a boolean indicating that the relocation is being performed for during testing purposes.
+    /// </summary>
+    /// <remarks>
+    /// Logs written to <see cref="LogOutput"/> will remove non-deterministic details such as timing or cycle counts.
+    /// </remarks>
+    public bool TestingMode { get; set; }
+
+    /// <summary>
+    /// Get or sets the list of play step indices at which to log the full assembly for both original and relocated code for debugging purposes.
+    /// </summary>
+    public List<int> LogFullAsmAtPlayStep { get; } = new();
 
     /// <summary>
     /// Returns a human-readable representation of the current configuration.

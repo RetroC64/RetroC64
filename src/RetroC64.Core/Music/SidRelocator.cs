@@ -29,9 +29,12 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-using System.Diagnostics;
-using System.Text;
+using Asm6502;
 using Asm6502.Relocator;
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace RetroC64.Music;
 
@@ -136,6 +139,8 @@ public class SidRelocator
 
                 // 2.1 Init routine for subtune i
                 _codeRelocator.Cpu.A = (byte)i;
+                _codeRelocator.Cpu.X = 0;
+                _codeRelocator.Cpu.Y = 0;
                 if (_codeRelocator.RunSubroutineAt(sid.InitAddress, config.MaxInitCycles))
                 {
                     totalCycleCount += _codeRelocator.RunTotalCycleCount;
@@ -154,7 +159,7 @@ public class SidRelocator
             if (_codeRelocator.Diagnostics.LogLevel <= CodeRelocationDiagnosticKind.Info)
             {
                 writer.WriteLine(
-                    $"Emulation took {clock.ElapsedMilliseconds}ms for {sid.Songs} songs and {config.PlaySteps} play calls. Cycles: {totalCycleCount}. Cycles/s: {totalCycleCount / clock.Elapsed.TotalSeconds:0}");
+                    $"Emulation took {(config.TestingMode ? 0 : clock.ElapsedMilliseconds)}ms for {sid.Songs} songs and {config.PlaySteps} play calls. Cycles: {totalCycleCount}. Cycles/s: {(config.TestingMode ? 0.0 : totalCycleCount / clock.Elapsed.TotalSeconds):0}");
             }
 
             // -----------------------------------------------------------------------------
@@ -165,14 +170,14 @@ public class SidRelocator
             var newSidData = _codeRelocator.Relocate(new()
             {
                 Address = targetAddress,
-                ZpRange = new(config.ZpLow, (byte)(config.ZpHigh - config.ZpLow))
+                ZpRange = new(config.ZpLow, (byte)(config.ZpHigh - config.ZpLow + 1))
             });
             var zpAddresses = _codeRelocator.GetZeroPageAddresses();
             clock.Stop();
 
             if (_codeRelocator.Diagnostics.LogLevel <= CodeRelocationDiagnosticKind.Info)
             {
-                writer.WriteLine($"Analysis took {clock.ElapsedMilliseconds}ms");
+                writer.WriteLine($"Analysis took {(config.TestingMode ? 0 : clock.ElapsedMilliseconds)}ms");
                 _codeRelocator.PrintRelocationMap(writer);
             }
 
@@ -211,6 +216,24 @@ public class SidRelocator
             int badPulseWidthCount = 0;
             bool isValid = true;
 
+
+            var logAsm = new StringBuilder();
+            Action<ushort> logExecution = address =>
+            {
+                var instruction = Mos6510Instruction.Decode(_codeRelocator.Ram[address..]);
+                logAsm.AppendLine($"${address:x4} {instruction}");
+            };
+
+            var newLogAsm = new StringBuilder();
+            Action<ushort> logNewExecution = address =>
+            {
+                var instruction = Mos6510Instruction.Decode(newCodeRelocator.Ram[address..]);
+                newLogAsm.AppendLine($"${address:x4} {instruction}");
+            };
+
+            // Allow to log at a particular play step for debugging
+            var logAtSteps = CollectionsMarshal.AsSpan(config.LogFullAsmAtPlayStep);
+
             // 4.1 Verify loop for each subtune
             int checkCount = 0;
             string? sidVerificationErrorMessage = null;
@@ -221,12 +244,33 @@ public class SidRelocator
                     writer.WriteLine($"Verifying relocated subtune {i + 1}/{sid.Songs}");
                 }
 
-                // Re-run init on both versions without analysis to only compare SID states
-                _codeRelocator.Cpu.A = (byte)i;
-                _codeRelocator.RunSubroutineAt(sid.InitAddress, config.MaxInitCycles, enableAnalysis: false);
+                var logAtInit = logAtSteps.Contains(-1);
+                if (logAtInit)
+                {
+                    logAsm.Clear();
+                    _codeRelocator.LogExecuteAtPC = logExecution;
+                    newLogAsm.Clear();
+                    newCodeRelocator.LogExecuteAtPC = logNewExecution;
+                }
+                try
+                {
+                    // Re-run init on both versions without analysis to only compare SID states
+                    _codeRelocator.Cpu.A = (byte)i;
+                    _codeRelocator.RunSubroutineAt(sid.InitAddress, config.MaxInitCycles, enableAnalysis: false);
 
-                newCodeRelocator.Cpu.A = (byte)i;
-                newCodeRelocator.RunSubroutineAt(newInitAddress, config.MaxInitCycles, enableAnalysis: false);
+                    newCodeRelocator.Cpu.A = (byte)i;
+                    newCodeRelocator.RunSubroutineAt(newInitAddress, config.MaxInitCycles, enableAnalysis: false);
+                }
+                finally
+                {
+                    if (logAtInit)
+                    {
+                        writer.WriteLine($"*************** Original initialization code execution log:");
+                        writer.WriteLine(logAsm.ToString());
+                        writer.WriteLine($"*************** Relocated initialization code execution log:");
+                        writer.WriteLine(newLogAsm.ToString());
+                    }
+                }
 
                 // Baseline SID register comparison after init
                 checkCount += 3;
@@ -234,17 +278,44 @@ public class SidRelocator
 
                 // 4.2 Compare SID states after each play step
                 totalCycleCount = 0;
+
                 for (int j = 0; j < (int)config.PlaySteps; j++)
                 {
-                    PlayStep(_codeRelocator, sid.PlayAddress, config.MaxPlayCycles, $"playing subtune {i + 1} and play step {j}", ref totalCycleCount, enableAnalysis: false);
+                    var logAtStep = logAtSteps.Contains(j);
 
-                    PlayStep(newCodeRelocator, newPlayAddress, config.MaxPlayCycles, $"playing subtune {i + 1} and play step {j}", ref totalCycleCount, enableAnalysis: false);
+                    if (logAtStep)
+                    {
+                        logAsm.Clear();
+                        _codeRelocator.LogExecuteAtPC = logExecution;
+                        newLogAsm.Clear();
+                        newCodeRelocator.LogExecuteAtPC = logNewExecution;
+                    }
+                    try
+                    {
+                        PlayStep(_codeRelocator, sid.PlayAddress, config.MaxPlayCycles, $"playing subtune {i + 1} and play step {j}", ref totalCycleCount, enableAnalysis: false);
+
+                        PlayStep(newCodeRelocator, newPlayAddress, config.MaxPlayCycles, $"playing subtune {i + 1} and play step {j}", ref totalCycleCount, enableAnalysis: false);
+                    }
+                    finally
+                    {
+                        if (logAtStep)
+                        {
+                            _codeRelocator.LogExecuteAtPC = null;
+                            newCodeRelocator.LogExecuteAtPC = null;
+
+                            writer.WriteLine($"*************** Original code execution log at play step {j}");
+                            writer.WriteLine(logAsm.ToString());
+                            writer.WriteLine($"*************** Relocated code execution log at play step {j}:");
+                            writer.WriteLine(newLogAsm.ToString());
+                        }
+                    }
 
                     checkCount += 3;
                     if (!VerifySidState(_codeRelocator.Ram, newCodeRelocator.Ram, j, ref badPitchCount, ref badPulseWidthCount))
                     {
-                        sidVerificationErrorMessage = $"Relocation failed for subtune {i + 1} at play step {j + 1}";
+                        sidVerificationErrorMessage = $"Relocation failed for subtune {i + 1} at play step {j}";
                         writer.WriteLine(sidVerificationErrorMessage);
+
                         isValid = false;
                         goto exitFromVerify; // Early exit on first hard mismatch (non-pitch/pulse)
                     }
@@ -381,6 +452,10 @@ public class SidRelocator
             {
                 throw new InvalidOperationException($"Unable to determine the play address (from SID, IRQ...etc.)");
             }
+
+            _codeRelocator.Cpu.A = 0;
+            _codeRelocator.Cpu.X = 0;
+            _codeRelocator.Cpu.Y = 0;
 
             // 3) Run play routine; count cycles and enforce budget
             if (codeRelocator.RunSubroutineAt(playAddress, maxPlayCycles, enableAnalysis: enableAnalysis))
