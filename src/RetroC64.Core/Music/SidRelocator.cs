@@ -448,7 +448,7 @@ public class SidRelocator
                 {
                     badPitch[i / 7] = 1;
                 }
-                else if (i < 21 && (i % 7) == 4)
+                else if (i < 21 && (i % 7) < 4)
                 {
                     badPulseWidth[i / 7] = 1;
                 }
@@ -459,7 +459,7 @@ public class SidRelocator
                     sb.Append("Wrong SID state! ");
                     if (frame >= 0)
                     {
-                        sb.Append($"At time {frame}, ");
+                        sb.Append($"At play step {frame}, ");
                     }
                     else
                     {
