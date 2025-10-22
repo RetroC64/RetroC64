@@ -9,11 +9,11 @@ namespace RetroC64.Music;
 public class SidPlayer
 {
     private readonly SidFile _sidFile;
-    private readonly Mos6510Assembler _asm;
+    private readonly C64Assembler _asm;
     private readonly ZeroPageAddress _zpPlaybackPosition;
     private readonly Mos6502Label _musicBuffer = new("musicBuffer");
 
-    public SidPlayer(SidFile sidFile, Mos6510Assembler asm, ZeroPageAllocator zpAlloc, ReadOnlySpan<byte> sidZpAddresses)
+    public SidPlayer(SidFile sidFile, C64Assembler asm, ZeroPageAllocator zpAlloc, ReadOnlySpan<byte> sidZpAddresses)
     {
         _sidFile = sidFile;
         _asm = asm;

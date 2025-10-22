@@ -33,7 +33,7 @@ public static class Demo
         basicCompiler.Reset();
         var basicBuffer = basicCompiler.Compile($"0SYS{startAsm}");
 
-        using var asm = new Mos6510Assembler((ushort)startAsm);
+        using var asm = new C64Assembler((ushort)startAsm);
         
         asm
             .LabelForward(out var screenBuffer)
