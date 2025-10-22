@@ -109,6 +109,15 @@ public class Disk64
     }
 
     /// <summary>
+    /// Gets a span representing the raw image data. This property provides direct, unsafe access to the underlying
+    /// image bytes.
+    /// </summary>
+    /// <remarks>Modifying the returned span will alter the image data in place. Use caution when accessing
+    /// this property, as changes may affect the integrity of the image. The lifetime and validity of the span depend on
+    /// the underlying storage; ensure the parent object remains valid while using the span.</remarks>
+    public Span<byte> UnsafeRawImage => _image;
+
+    /// <summary>
     /// Formats the disk with an optional disk name.
     /// </summary>
     /// <param name="diskName">The disk name (max 16 characters).</param>
