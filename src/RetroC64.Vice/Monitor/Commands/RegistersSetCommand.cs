@@ -34,7 +34,7 @@ public class RegistersSetCommand() : MonitorCommand(MonitorCommandType.Registers
         foreach (var item in Items)
         {
             buf[0] = SizePerEntry; // Force the size to be 3 bytes as it is done in the emulator
-            buf[1] = item.RegisterId.Value;
+            buf[1] = (byte)item.RegisterId;
             BinaryPrimitives.WriteUInt16LittleEndian(buf.Slice(2, 2), item.Value);
             buf = buf.Slice(4);
         }

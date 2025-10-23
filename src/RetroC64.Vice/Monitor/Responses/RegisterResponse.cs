@@ -26,7 +26,7 @@ public class RegisterResponse() : MonitorResponse(MonitorResponseType.RegisterIn
         for (int i = 0; i < count; i++)
         {
             byte size = body[0];
-            byte regId = body[1];
+            var regId = (RegisterId)body[1];
             ushort value = 0;
             if (size == 2)
             {
@@ -44,7 +44,7 @@ public class RegisterResponse() : MonitorResponse(MonitorResponseType.RegisterIn
                 break;
             }
 
-            Items[i] = new(new(regId), value);
+            Items[i] = new(regId, value);
 
             body = body.Slice(size + 1); // Move past the item
         }

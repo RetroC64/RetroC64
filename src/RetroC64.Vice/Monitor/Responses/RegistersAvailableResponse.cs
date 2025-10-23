@@ -27,10 +27,10 @@ public class RegistersAvailableResponse() : MonitorResponse(MonitorResponseType.
         {
             var originalBody = body;
             var itemSize = body[0];
-            var registerId = body[1];
+            var registerId = (RegisterId)body[1];
             var registerSize = body[2];
             var registerName = ReadString(body.Slice(3));
-            Registers[i] = new(new(registerId), registerSize, registerName);
+            Registers[i] = new(registerId, registerSize, registerName);
 
             // Skip the item
             body = originalBody.Slice(itemSize + 1);
