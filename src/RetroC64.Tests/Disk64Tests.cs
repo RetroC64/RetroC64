@@ -19,7 +19,7 @@ public class Disk64Tests
     {
         const string fileGenerated = "test_format_generated.d64";
         const string fileExpected = "test_format_expected.d64";
-        await RunC1541([$"format MYDISK,01 d64 {fileExpected}"]);
+        await RunC1541([$"format mydisk,01 d64 {fileExpected}"]);
         Assert.IsTrue(File.Exists(fileExpected), $"Expected disk image file {fileExpected} was not created.");
 
         var image = new Disk64
@@ -46,9 +46,9 @@ public class Disk64Tests
 
         File.Delete(fileExpected);
         var result = await RunC1541([
-            $"format MYDISK,01 d64 {fileExpected}",
-            $"write {t1File} HELLO1,p",
-            $"delete HELLO1",
+            $"format mydisk,01 d64 {fileExpected}",
+            $"write {t1File} hello1,p",
+            $"delete hello1",
         ]);
 
         Console.WriteLine(result);
@@ -89,9 +89,9 @@ public class Disk64Tests
 
         File.Delete(fileExpected);
         var result = await RunC1541([
-            $"format MYDISK,01 d64 {fileExpected}",
-            $"write {t1File} HELLO1,p",
-            $"write {t2File} HELLO2,p",
+            $"format mydisk,01 d64 {fileExpected}",
+            $"write {t1File} hello1,p",
+            $"write {t2File} hello2,p",
         ]);
 
         Console.WriteLine(result);
@@ -128,10 +128,10 @@ public class Disk64Tests
 
         File.Delete(fileExpected);
         var result = await RunC1541([
-            $"format MYDISK,01 d64 {fileExpected}",
+            $"format mydisk,01 d64 {fileExpected}",
 
             ..
-            Enumerable.Range(1, maxFiles).Select(x => $"write {tsFile} HELLO{x},p")
+            Enumerable.Range(1, maxFiles).Select(x => $"write {tsFile} hello{x},p")
         ]);
 
         Console.WriteLine(result);
@@ -171,12 +171,12 @@ public class Disk64Tests
 
         File.Delete(fileExpected);
         var result = await RunC1541([
-            $"format MYDISK,01 d64 {fileExpected}",
+            $"format mydisk,01 d64 {fileExpected}",
 
             ..
-            Enumerable.Range(1, maxFiles).Select(x => $"write {tsFile} HELLO{x},p"),
+            Enumerable.Range(1, maxFiles).Select(x => $"write {tsFile} hello{x},p"),
             ..
-            Enumerable.Range(1, maxFiles).Reverse().Select(x => $"delete HELLO{x}")
+            Enumerable.Range(1, maxFiles).Reverse().Select(x => $"delete hello{x}")
         ]);
 
         Console.WriteLine(result);
@@ -248,7 +248,7 @@ public class Disk64Tests
 
         CollectionAssert.AreEqual(t1Data, t2Data, "Reading back from the d64 is invalid");
 
-        // We still extract the file with cs1541 to ensure that the content is correct
+        // We still extract the file with c1541 to ensure that the content is correct
         File.Delete("TLARGE");
         var result = await RunC1541([
             $"attach  {fileGenerated}",

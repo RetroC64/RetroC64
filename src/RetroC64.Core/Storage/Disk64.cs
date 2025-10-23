@@ -6,7 +6,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 
 // ReSharper disable InconsistentNaming
 
@@ -88,14 +87,13 @@ public class Disk64
     /// Gets or sets the disk name.
     /// </summary>
     /// <exception cref="ArgumentException">Thrown if the disk name exceeds 16 characters.</exception>
-    public string DiskName
+    public CbmFileName DiskName
     {
         get => GetBam().DiskName;
         set
         {
             ArgumentNullException.ThrowIfNull(value);
-            if (value.Length > 16) throw new ArgumentException("Disk name cannot exceed 16 characters.");
-            GetBam().DiskName = value.ToUpperInvariant();
+            GetBam().DiskName = value;
         }
     }
 
@@ -122,10 +120,9 @@ public class Disk64
     /// </summary>
     /// <param name="diskName">The disk name (max 16 characters).</param>
     /// <exception cref="ArgumentException">Thrown if the disk name exceeds 16 characters.</exception>
-    public void Format(string diskName = "")
+    public void Format(CbmFileName? diskName = null)
     {
-        ArgumentNullException.ThrowIfNull(diskName);
-        if (diskName.Length > 16) throw new ArgumentException("Disk name cannot exceed 16 characters.");
+        diskName = diskName ?? CbmFileName.Empty;
         // Clear the image
         Array.Clear(_image, 0, _image.Length);
 
@@ -134,7 +131,7 @@ public class Disk64
 
         bam = new Bam
         {
-            DiskName = diskName.ToUpperInvariant()
+            DiskName = diskName
         };
 
         // Initialize sectors
@@ -354,9 +351,9 @@ public class Disk64
     /// <param name="fileName">The file name to read.</param>
     /// <returns>The file data as a byte array.</returns>
     /// <exception cref="FileNotFoundException">Thrown if the file is not found.</exception>
-    public byte[] ReadFile(string fileName)
+    public byte[] ReadFile(CbmFileName fileName)
     {
-        var entry = ListDirectory().FirstOrDefault(e => e.FileName.Trim().Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        var entry = ListDirectory().FirstOrDefault(e => e.FileName.Equals(fileName));
         if (entry == null) throw new FileNotFoundException($"File '{fileName}' not found.");
         return ReadFile(entry);
     }
@@ -368,7 +365,7 @@ public class Disk64
     /// <returns>The file data as a byte array.</returns>
     private byte[] ReadFile(CbmDirectoryEntry entry)
     {
-        var data = new List<byte>();
+        var data = new MemoryStream();
         byte track = entry.StartTrack, sector = entry.StartSector;
         while (track != 0)
         {
@@ -376,7 +373,7 @@ public class Disk64
             byte nextTrack = sectorData[0];
             byte nextSector = sectorData[1];
             int dataLen = (nextTrack == 0) ? sectorData[1] - 1 : SectorDataSize;
-            data.AddRange(sectorData.Slice(2, dataLen).ToArray());
+            data.Write(sectorData.Slice(2, dataLen));
             track = nextTrack;
             sector = nextSector;
         }
@@ -389,54 +386,65 @@ public class Disk64
     /// <param name="fileName">The file name to write.</param>
     /// <param name="data">The file data.</param>
     /// <param name="fileType">The file type (default is PRG).</param>
-    public void WriteFile(string fileName, ReadOnlySpan<byte> data, CbmFileType fileType = CbmFileType.PRG)
+    public void WriteFile(CbmFileName fileName, ReadOnlySpan<byte> data, CbmFileType fileType = CbmFileType.PRG)
     {
         // Remove existing file if present
-        var existing = ListDirectory().FirstOrDefault(e => e.FileName.Trim().Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        var existing = ListDirectory().FirstOrDefault(e => e.FileName.Equals(fileName));
         if (existing != null)
             DeleteFile(fileName);
 
-        // Allocate sectors
-        var sectors = AllocateSectorsForFile(data.Length);
-        int dataOffset = 0;
-        for (int i = 0; i < sectors.Count; i++)
+        byte startTrack = 0;
+        byte startSector = 0;
+        ushort sectorCount = 0;
+        if (data.Length > 0)
         {
-            var (track, sector) = sectors[i];
-            var sectorData = GetSector(track, sector);
-
-            var tempSectorData = _tempSector.AsSpan();
-            if (i < sectors.Count - 1)
+            // Allocate sectors
+            var sectors = AllocateSectorsForFile(data.Length);
+            int dataOffset = 0;
+            for (int i = 0; i < sectors.Count; i++)
             {
-                tempSectorData[0] = sectors[i + 1].track;
-                tempSectorData[1] = sectors[i + 1].sector;
-                int len = Math.Min(SectorDataSize, data.Length - dataOffset);
-                data.Slice(dataOffset, len).CopyTo(tempSectorData.Slice(2, len));
-                // We don't clear to keep the behavior of the original DOS which seems to keep a buffer around about what is written (TODO: or read?)
-                //if (len < SectorDataSize) tempSectorData.Slice(2 + len, SectorDataSize - len).Clear();
-                dataOffset += len;
-            }
-            else
-            {
-                tempSectorData[0] = 0;
-                int len = data.Length - dataOffset;
-                Debug.Assert(len <= SectorDataSize);
-                tempSectorData[1] = (byte)(len + 1);
-                data.Slice(dataOffset, len).CopyTo(tempSectorData.Slice(2, len));
-                // We don't clear to keep the behavior of the original DOS which seems to keep a buffer around about what is written (TODO: or read?)
-                //if (len < SectorDataSize) tempSectorData.Slice(2 + len, SectorDataSize - len).Clear();
+                var (track, sector) = sectors[i];
+                var sectorData = GetSector(track, sector);
+
+                var tempSectorData = _tempSector.AsSpan();
+                if (i < sectors.Count - 1)
+                {
+                    tempSectorData[0] = sectors[i + 1].track;
+                    tempSectorData[1] = sectors[i + 1].sector;
+                    int len = Math.Min(SectorDataSize, data.Length - dataOffset);
+                    data.Slice(dataOffset, len).CopyTo(tempSectorData.Slice(2, len));
+                    // We don't clear to keep the behavior of the original DOS which seems to keep a buffer around about what is written (TODO: or read?)
+                    //if (len < SectorDataSize) tempSectorData.Slice(2 + len, SectorDataSize - len).Clear();
+                    dataOffset += len;
+                }
+                else
+                {
+                    tempSectorData[0] = 0;
+                    int len = data.Length - dataOffset;
+                    Debug.Assert(len <= SectorDataSize);
+                    tempSectorData[1] = (byte)(len + 1);
+                    data.Slice(dataOffset, len).CopyTo(tempSectorData.Slice(2, len));
+                    // We don't clear to keep the behavior of the original DOS which seems to keep a buffer around about what is written (TODO: or read?)
+                    //if (len < SectorDataSize) tempSectorData.Slice(2 + len, SectorDataSize - len).Clear();
+                }
+
+                tempSectorData.CopyTo(sectorData);
+                SetSectorFree(track, sector, false);
             }
 
-            tempSectorData.CopyTo(sectorData);
-            SetSectorFree(track, sector, false);
+            startTrack = sectors[0].track;
+            startSector = sectors[0].sector;
+            sectorCount = (ushort)sectors.Count;
         }
+
         // Add directory entry
-        AddDirectoryEntry(fileName, fileType, sectors[0].track, sectors[0].sector, (ushort)sectors.Count);
+        AddDirectoryEntry(fileName, fileType, startTrack, startSector, sectorCount);
     }
 
     /// <summary>
     /// Deletes a file from the disk.
     /// </summary>
-    public void DeleteFile(string fileName)
+    public void DeleteFile(CbmFileName fileName)
     {
         // Mark directory entry as deleted
         byte track = BamTrack, sector = 1;
@@ -451,8 +459,8 @@ public class Disk64
             foreach (ref var dirEntry in dirEntries)
             {
                 if ((dirEntry.FileType & FileType.ClosedFlag) == 0) continue;
-                string name = dirEntry.FileName;
-                if (name.Trim().Equals(fileName.Trim(), StringComparison.OrdinalIgnoreCase))
+                var name = dirEntry.FileName;
+                if (name.Equals(fileName))
                 {
                     dirEntry.FileType = 0;
                     // Free sectors
@@ -707,7 +715,7 @@ public class Disk64
         }
     }
 
-    private void AddDirectoryEntry(string fileName, CbmFileType fileType, byte startTrack, byte startSector, ushort sizeSectors)
+    private void AddDirectoryEntry(CbmFileName fileName, CbmFileType fileType, byte startTrack, byte startSector, ushort sizeSectors)
     {
         // Iterate on directory entries to find a free one
         byte track = BamTrack, sector = 1;
@@ -787,51 +795,31 @@ public class Disk64
         throw new IOException("Disk is full. No free directory entries available.");
     }
 
-    private static string Convert_PETSCII_TO_ASCII(Span<byte> span)
-    {
-        var indexOfA0 = span.IndexOf((byte)0xA0);
-        if (indexOfA0 < 0)
-        {
-            indexOfA0 = DirEntryFileNameSize; // No padding found, use full length
-        }
+    //private static string Convert_PETSCII_TO_ASCII(Span<byte> span)
+    //{
+    //    var indexOfA0 = span.IndexOf((byte)0xA0);
+    //    if (indexOfA0 < 0)
+    //    {
+    //        indexOfA0 = DirEntryFileNameSize; // No padding found, use full length
+    //    }
 
-        Span<byte> stack = stackalloc byte[span.Length];
-        span.Slice(0, indexOfA0).CopyTo(stack);
-        Update_PETSCII_To_ASCII(stack.Slice(0, indexOfA0));
+    //    Span<char> stack = stackalloc char[indexOfA0];
+    //    for (int i = 0; i < indexOfA0; i++)
+    //    {
+    //        stack[i] = C64CharSet.PETSCIIToChar(span[i]);
+    //    }
+        
+    //    return stack.ToString();
+    //}
 
-        return System.Text.Encoding.ASCII.GetString(stack.Slice(0, indexOfA0));
-    }
-
-    private static void Write_ASCII_To_PETSCII(Span<byte> span, string text)
-    {
-        var bytes = System.Text.Encoding.ASCII.GetBytes(text.ToUpperInvariant());
-        Update_ASCII_To_PETSCII(bytes.AsSpan(0, Math.Min(bytes.Length, span.Length)));
-        if (bytes.Length > span.Length) throw new ArgumentException($"Text '{text}' is too long to fit in the span of {span.Length} bytes.");
-        bytes.CopyTo(span);
-        if (bytes.Length < span.Length) span.Slice(bytes.Length).Fill(0xA0); // Fill remaining with space
-    }
-
-    private static void Update_ASCII_To_PETSCII(Span<byte> span)
-    {
-        foreach (ref var c in span)
-        {
-            if (c >= 'A' && c <= 'Z')
-                c = (byte)(c | (byte)0x80); // A ($41) → $C1
-            if (c >= 'a' && c <= 'z')
-                c = (byte)((byte)(c - 0x20) | 0x80); // a ($61) → A ($41) → $C1
-        }
-    }
-
-    private static void Update_PETSCII_To_ASCII(Span<byte> span)
-    {
-        foreach (ref var c in span)
-        {
-            if (c >= 0xC1 && c <= 0xDA) // A ($C1) → $41
-                c = (byte)(c & 0x7F); // Convert PETSCII to ASCII
-            if (c >= 0xE1 && c <= 0xFA) // a ($E1) → $61
-                c = (byte)((c & 0x7F) + 0x20); // Convert PETSCII to ASCII
-        }
-    }
+    //private static void Write_ASCII_To_PETSCII(Span<byte> span, string text)
+    //{
+    //    for (int i = 0; i < text.Length; i++)
+    //    {
+    //        span[i] = C64CharSet.CharToPETSCII(text[i]);
+    //    }
+    //    if (text.Length < span.Length) span.Slice(text.Length).Fill(0xA0); // Fill remaining with space
+    //}
 
     [Flags]
     private enum FileType : byte
@@ -906,10 +894,10 @@ public class Disk64
         /// <summary>
         /// Gets or sets the disk name in PETSCII.
         /// </summary>
-        public string DiskName
+        public CbmFileName DiskName
         {
-            get => Convert_PETSCII_TO_ASCII(DirNameSpan);
-            set => Write_ASCII_To_PETSCII(DirNameSpan, value.ToUpperInvariant());
+            get => new(DirNameSpan);
+            set => ((ReadOnlySpan<byte>)value).CopyTo(DirNameSpan);
         }
 
         public byte ReservedA0;
@@ -927,14 +915,13 @@ public class Disk64
         {
             get
             {
-                return Encoding.ASCII.GetString(MemoryMarshal.CreateReadOnlySpan(ref _diskIdLow, 2));
+                return new string([C64CharSet.PETSCIIToChar(_diskIdLow), C64CharSet.PETSCIIToChar(_diskIdHigh)]);
             }
             set
             {
-                var bytes = Encoding.ASCII.GetBytes(value.ToUpperInvariant());
-                if (bytes.Length != 2) throw new ArgumentException("Disk ID must be exactly 2 characters.");
-                _diskIdLow = bytes[0];
-                _diskIdHigh = bytes[1];
+                if (value.Length != 2) throw new ArgumentException("Disk ID must be exactly 2 characters.");
+                _diskIdLow = C64CharSet.CharToPETSCII(value[0]);
+                _diskIdHigh = C64CharSet.CharToPETSCII(value[1]);
             }
         }
 
@@ -1029,14 +1016,10 @@ public class Disk64
         private Span<byte> FileNameSpan => MemoryMarshal.CreateSpan(ref _fileName[0], DirEntryFileNameSize);
 
 
-        public string FileName
+        public CbmFileName FileName
         {
-            get => Convert_PETSCII_TO_ASCII(FileNameSpan);
-            set
-            {
-                Write_ASCII_To_PETSCII(FileNameSpan, value.ToUpperInvariant());
-            }
-
+            get => new(FileNameSpan);
+            set => ((ReadOnlySpan<byte>)value).CopyTo(FileNameSpan);
         }
 
         public byte FirstTrackREL;

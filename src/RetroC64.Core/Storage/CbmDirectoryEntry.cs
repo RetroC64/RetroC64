@@ -17,7 +17,7 @@ public record CbmDirectoryEntry
     /// <summary>
     /// Gets or sets the name of the file.
     /// </summary>
-    public string FileName { get; set; } = string.Empty;
+    public CbmFileName FileName { get; set; } = CbmFileName.Empty;
 
     /// <summary>
     /// Gets or sets the starting track of the file on disk.
