@@ -17,26 +17,28 @@ public static class C64AssemblerExtensions
     /// Sets up the stack pointer to $ff, which is the top of the C64 stack.
     /// </summary>
     /// <param name="asm">The assembler to setup the stack.</param>
+    /// <param name="stackValue">The stack pointer value to set, default is $ff.</param>
     /// <returns>The assembler instance for chaining.</returns>
     /// <remarks>
     /// Modifies the stack and X register.
     /// </remarks>
-    public static C64Assembler  SetupStack(this C64Assembler  asm)
+    public static C64Assembler SetupStack(this C64Assembler asm, byte stackValue = 0xFF)
         => asm
-            .LDX_Imm(0xff)
+            .LDX_Imm(stackValue)
             .TXS();
 
     /// <summary>
     /// Configures the CPU port to enable full RAM access on the C64.
     /// </summary>
     /// <param name="asm">The assembler to configure the CPU port.</param>
+    /// <param name="defaultFlags">The CPU port flags to set, default is <see cref="CPUPortFlags.FullRamWithKernal"/>.</param>
     /// <returns>The assembler instance for chaining.</returns>
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static C64Assembler  SetupFullRamAccess(this C64Assembler  asm)
+    public static C64Assembler SetupRamAccess(this C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.FullRamWithKernal)
         => asm
-            .LDA_Imm(CPUPortFlags.FullRam)
+            .LDA_Imm(defaultFlags)
             .STA(C64_CPU_PORT); // Store in $01, which is the RAM setup register for C64
 
     /// <summary>
@@ -47,7 +49,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static C64Assembler  DisableAllIrq(this C64Assembler  asm)
+    public static C64Assembler DisableAllIrq(this C64Assembler asm)
         => asm
             .LDA_Imm(CIAInterruptFlags.ClearAllInterrupts)
             .STA(CIA1_INTERRUPT_CONTROL) // CIA1 IRQs
@@ -70,7 +72,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifiers the A and X registers.
     /// </remarks>
-    public static C64Assembler  ClearMemoryBy256BytesBlock(this C64Assembler  asm, ushort address, ushort count, byte value = 0)
+    public static C64Assembler ClearMemoryBy256BytesBlock(this C64Assembler asm, ushort address, ushort count, byte value = 0)
     {
         if (count == 0) return asm;
 
@@ -99,7 +101,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the stack and the A register.
     /// </remarks>
-    public static C64Assembler  PushAllRegisters(this C64Assembler  asm)
+    public static C64Assembler PushAllRegisters(this C64Assembler asm)
         => asm
             .PHA() // Push accumulator
             .TXA() // Transfer X to A
@@ -115,7 +117,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the stack, the A register, the X register, and the Y register.
     /// </remarks>
-    public static C64Assembler  PopAllRegisters(this C64Assembler  asm)
+    public static C64Assembler PopAllRegisters(this C64Assembler asm)
         => asm
             .PLA() // Pull Y
             .TAY() // Transfer A to Y
@@ -123,7 +125,7 @@ public static class C64AssemblerExtensions
             .TAX() // Transfer A to X
             .PLA(); // Pull accumulator
 
-    public static C64Assembler  StoreLabelAtAddress(this C64Assembler  asm, Mos6502Label label, ushort address)
+    public static C64Assembler StoreLabelAtAddress(this C64Assembler asm, Mos6502Label label, ushort address)
     {
         return asm
             .LDA_Imm(label.LowByte()) // Load the low byte of the address
@@ -137,7 +139,7 @@ public static class C64AssemblerExtensions
     /// </summary>
     /// <param name="asm">The assembler instance.</param>
     /// <returns>The assembler instance for chaining.</returns>
-    public static C64Assembler  InfiniteLoop(this C64Assembler  asm)
+    public static C64Assembler InfiniteLoop(this C64Assembler asm)
         => asm
             .Label(out var infinite)
             .JMP(infinite);
@@ -152,7 +154,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// <para>Modifies the A register</para>
     /// </remarks>
-    public static C64Assembler  SetupRasterIrq(this C64Assembler  asm, Mos6502Label rasterHandler, byte rasterLine = 0)
+    public static C64Assembler SetupRasterIrq(this C64Assembler asm, Mos6502Label rasterHandler, byte rasterLine = 0)
     {
         return asm
             .LDA_Imm(rasterLine) // Load 0 into the A register
@@ -180,6 +182,8 @@ public static class C64AssemblerExtensions
     /// </remarks>
     public static C64Assembler DisableNmi(this C64Assembler asm)
     {
+        // From https://codebase64.pokefinder.org/doku.php?id=base:nmi_lock
+        // By Wolfram Sang (Ninja/The Dreams)
         asm
             .LabelForward(out var nmiHandler)
             .StoreLabelAtAddress(nmiHandler, NMI_VECTOR) // Store the NMI handler address at the NMI vector

@@ -1096,5 +1096,9 @@ public static class C64Registers
         CassetteMotor = 1 << 5,
         /// <summary>All RAM configuration (LORAM, HIRAM, CHAREN, CassetteSwitch, CassetteMotor).</summary>
         FullRam = RamVisibleAtBasicAndKernalRoms | CharRomAsIO | CassetteSwitch | CassetteMotor,
+        /// <summary>
+        /// Represents a configuration in which full RAM is accessible along with the kernal.
+        /// </summary>
+        FullRamWithKernal = RamVisibleAtBasicRom | CharRomAsIO | CassetteSwitch | CassetteMotor,
     }
 }
