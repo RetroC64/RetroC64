@@ -4,6 +4,7 @@
 
 using Asm6502;
 using RetroC64;
+using RetroC64.App;
 using RetroC64.Basic;
 using RetroC64.Graphics;
 using RetroC64.Music;
@@ -16,7 +17,7 @@ using static RetroC64.C64Registers;
 
 namespace C64NETConf2025;
 
-public static class Demo
+public class Demo : C64App
 {
     public static async Task Create(string prgFileName)
     {
@@ -85,7 +86,7 @@ public static class Demo
             .STA(0x02A6) // Store back NTSC(0)/PAL(1) flag to 0x02A6
             .DisableAllIrq()
             .SetupStack()
-            .SetupFullRamAccess()
+            .SetupRamAccess()
             .DisableNmi()
             .SetupRasterIrq(irqScene1, 0xF8)
 
@@ -541,7 +542,7 @@ public static class Demo
 
             // ResponseType: RegistersAvailable, Error: None, RequestId: 0x00000001, Registers: [RegisterName { RegisterId = 3, SizeInBits = 16, Name = PC }, RegisterName { RegisterId = 0, SizeInBits = 8, Name = A }, RegisterName { RegisterId = 1, SizeInBits = 8, Name = X }, RegisterName { RegisterId = 2, SizeInBits = 8, Name = Y }, RegisterName { RegisterId = 4, SizeInBits = 8, Name = SP }, RegisterName { RegisterId = 55, SizeInBits = 8, Name = 00 }, RegisterName { RegisterId = 56, SizeInBits = 8, Name = 01 }, RegisterName { RegisterId = 5, SizeInBits = 8, Name = FL }, RegisterName { RegisterId = 53, SizeInBits = 16, Name = LIN }, RegisterName { RegisterId = 54, SizeInBits = 16, Name = CYC }]
 
-            monitor.SendCommand(new RegistersSetCommand() { Items = [new RegisterValue(new RegisterId(3), startOfCode.Address)] });
+            monitor.SendCommand(new RegistersSetCommand() { Items = [new RegisterValue(RegisterId.PC, startOfCode.Address)] });
             monitor.SendCommand(new ExitCommand());
 
         }
