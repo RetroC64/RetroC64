@@ -4,12 +4,14 @@
 
 using RetroC64.App;
 
+namespace HelloBasic;
+
 class HelloBasic : C64AppDisk
 {
     protected override void Initialize(C64AppInitializeContext context)
     {
-        context.Settings.EnableViceMonitorLogging = true;
-        context.Settings.EnableViceMonitorVerboseLogging= true;
+        context.Settings.EnableViceMonitorLogging = false;
+        context.Settings.EnableViceMonitorVerboseLogging= false;
         
         Add(new C64AppBasic()
         {

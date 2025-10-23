@@ -66,7 +66,7 @@ public class C64AppBuilder : IC64FileContainer
         C64HotReloadService.UpdateApplicationEvent += HotReloadServiceOnUpdateApplicationEvent;
 
 
-        Log = _loggerFactory.CreateLogger(rootElement.Name);
+        Log = _loggerFactory.CreateLogger($"[gray]RetroC64[/]-{rootElement.Name}");
     }
 
     public C64AppBuilderSettings Settings { get; } = new C64AppBuilderSettings();
