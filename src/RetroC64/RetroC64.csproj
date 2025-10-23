@@ -33,10 +33,11 @@
 
   <ItemGroup>
     <PackageReference Include="Lunet.Extensions.Logging.SpectreConsole" />
-    <PackageReference Include="MinVer">
+    <!-- Disabled to make it compatible with code reload for now -->
+    <!--<PackageReference Include="MinVer">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    </PackageReference>-->
     <PackageReference Include="XenoAtom.CommandLine" />
   </ItemGroup>
 

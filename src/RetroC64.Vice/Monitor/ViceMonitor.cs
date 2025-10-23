@@ -183,6 +183,24 @@ public sealed class ViceMonitor : IDisposable
         }
     }
 
+    /// <summary>
+    /// Removes a leading Windows drive letter and colon from the specified path to ensure compatibility with the VICE
+    /// monitor that interprets a colon followed by a file type.
+    /// </summary>
+    /// <param name="path">The file path to sanitize. If the path begins with a drive letter followed by a colon (e.g., "C:"), these
+    /// characters are removed.</param>
+    /// <returns>A sanitized path string without a leading drive letter and colon if present; otherwise, the original path.</returns>
+    public static string GetSafePath(string path)
+    {
+        // If the path contains `:`, it is interpreted by VICE as a character followed by a file type (e.g. prg)
+        // Problem is that Windows paths contains `:`, so we need to remove them
+        if (OperatingSystem.IsWindows() && path.Length > 2 && char.IsAsciiLetter(path[0]) && path[1] == ':')
+        {
+            path = path.Substring(2);
+        }
+        return path;
+    }
+
     private void SendCommand(MonitorCommand command, TaskCompletionSource<MonitorResponse>? tcs)
     {
         var stream = _stream;

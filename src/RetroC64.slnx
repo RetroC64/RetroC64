@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/Examples/">
     <Project Path="../examples/C64NETConf2025/C64NETConf2025.csproj" Id="3aab6dfd-c863-4617-b37b-3e1e40ba15dc" />
+    <Project Path="../examples/HelloBasic/HelloBasic.csproj" Id="8dbf46c8-591f-4f3f-8cd6-c268367ae2b0" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../.editorconfig" />

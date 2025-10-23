@@ -62,9 +62,19 @@ public class ViceRunner : IDisposable
     public IPEndPoint BinaryMonitorEndPoint { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the VIC-II status bar is hidden in the user interface. Default is true.
+    /// </summary>
+    public bool HideVICIIStatusBar { get; set; } = true;
+
+    /// <summary>
     /// Gets the list of additional arguments to pass to the VICE executable.
     /// </summary>
     public List<string> Arguments { get; }
+
+    /// <summary>
+    /// Occurs when the associated process or operation has exited.
+    /// </summary>
+    public event Action? Exited;
 
     /// <summary>
     /// Gets a value indicating whether the VICE process is currently running.
@@ -121,6 +131,7 @@ public class ViceRunner : IDisposable
             },
             EnableRaisingEvents = true
         };
+        _process.Exited += (sender, args) => Exited?.Invoke();
 
         if (BinaryMonitor)
         {
@@ -136,6 +147,11 @@ public class ViceRunner : IDisposable
         {
             _process.StartInfo.ArgumentList.Add("-binarymonitoraddress");
             _process.StartInfo.ArgumentList.Add($"ip4://{BinaryMonitorEndPoint}");
+        }
+
+        if (HideVICIIStatusBar)
+        {
+            _process.StartInfo.ArgumentList.Add("+VICIIshowstatusbar");
         }
 
         foreach (var arg in Arguments)
