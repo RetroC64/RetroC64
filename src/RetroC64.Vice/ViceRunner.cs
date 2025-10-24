@@ -29,6 +29,7 @@ public class ViceRunner : IDisposable
         Arguments = new();
         BinaryMonitorEndPoint = new IPEndPoint(IPAddress.Loopback, DefaultBinaryMonitorPort);
         ExecutableName = FindViceExecutable();
+        WorkingDirectory = AppContext.BaseDirectory;
     }
 
     /// <summary>
@@ -40,6 +41,11 @@ public class ViceRunner : IDisposable
     /// Gets or sets the name or path of the VICE executable.
     /// </summary>
     public string ExecutableName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the working directory for the VICE process. Default is the current application base directory.
+    /// </summary>
+    public string WorkingDirectory { get; set; }
 
     /// <summary>
     /// Gets the underlying <see cref="Process"/> instance, if running.
@@ -127,7 +133,8 @@ public class ViceRunner : IDisposable
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                WorkingDirectory = WorkingDirectory
             },
             EnableRaisingEvents = true
         };

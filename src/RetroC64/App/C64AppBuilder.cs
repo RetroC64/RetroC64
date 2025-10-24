@@ -10,7 +10,6 @@ using RetroC64.Vice.Monitor.Commands;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Text;
-using System.Threading;
 
 namespace RetroC64.App;
 
@@ -18,11 +17,10 @@ public class C64AppBuilder : IC64FileContainer
 {
     private bool _commandLinePrepared;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly List<string> _buildGeneratedFiles = new();
+    private readonly List<string> _buildGeneratedFilesForVice = new();
     private ManualResetEventSlim _hotReloadEvent = new(false);
     private LogLevel _hotReloadLogLevel = LogLevel.Information;
     private string? _hotReloadReason;
-    private int _buildCount;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private bool _isAppInitialized;
     private bool _isViceRunning;
@@ -119,7 +117,7 @@ public class C64AppBuilder : IC64FileContainer
     
     public async Task BuildAsync()
     {
-        _buildGeneratedFiles.Clear();
+        _buildGeneratedFilesForVice.Clear();
 
         if (!TryInitializeAppElements())
         {
@@ -134,7 +132,6 @@ public class C64AppBuilder : IC64FileContainer
             context.PushFileContainer(this);
             RootElement.InternalBuild(context);
             Log.LogInformationMarkup($"⏱️ Build in [cyan]{clock.Elapsed.TotalMilliseconds:0.0}[/]ms");
-            _buildCount++;
         }
         catch (Exception ex)
         {
@@ -143,6 +140,7 @@ public class C64AppBuilder : IC64FileContainer
 
         _isAppInitialized = false; // Next time we force a re-initialization
     }
+    
 
     public async Task LiveAsync()
     {
@@ -152,7 +150,10 @@ public class C64AppBuilder : IC64FileContainer
         Log.LogInformationMarkup("👾 Launching VICE Emulator");
         Console.CancelKeyPress += OnConsoleOnCancelKeyPress;
 
-        var runner = new ViceRunner();
+        var runner = new ViceRunner()
+        {
+            WorkingDirectory = GetOrCreateBuildFolder()
+        };
         var monitor = new ViceMonitor();
 
         runner.Exited += async () =>
@@ -230,11 +231,11 @@ public class C64AppBuilder : IC64FileContainer
                     
                     await BuildAsync();
 
-                    if (_buildGeneratedFiles.Count > 0)
+                    if (_buildGeneratedFilesForVice.Count > 0)
                     {
                         monitor.SendCommand(new AutostartCommand()
                         {
-                            Filename = _buildGeneratedFiles[0],
+                            Filename = _buildGeneratedFilesForVice[0],
                             RunAfterLoading = true
                         });
                     }
@@ -327,17 +328,54 @@ public class C64AppBuilder : IC64FileContainer
         return await appBuilder.Run(args);
     }
 
-    void IC64FileContainer.AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data)
+
+    private string GetOrCreateBuildFolder()
     {
-        if ((_buildCount & 1) != 0)
+        if (!Directory.Exists(Settings.RetroC64BuildFolder))
         {
-            filename = Path.GetFileNameWithoutExtension(filename) + "_1" + Path.GetExtension(filename);
+            Directory.CreateDirectory(Settings.RetroC64BuildFolder);
         }
 
-        Log.LogInformationMarkup($"💽 Creating file [yellow]{Markup.Escape(filename)}[/] ([cyan]{data.Length}[/] bytes)");
+        return Settings.RetroC64BuildFolder;
+    }
+
+
+
+    void IC64FileContainer.AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data)
+    {
+        var buildFolder = GetOrCreateBuildFolder();
+
+        // Ensure filename is only the file name
+        string newFileName;
+        string fullPath;
         
-        FileService.SaveFile(filename, data);
-        _buildGeneratedFiles.Add(filename);
+        // Try to delete the filename first, it might be locked by VICE
+        int retry = 0;
+        while (true)
+        {
+            newFileName = retry == 0 ? filename : Path.GetFileNameWithoutExtension(filename) + $"__{retry}" + Path.GetExtension(filename);
+            fullPath = Path.Combine(buildFolder, newFileName);
+
+            try
+            {
+                if (File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                }
+
+                break;
+            }
+            catch
+            {
+                // Ignore
+                retry++;
+            }
+        }
+
+        Log.LogInformationMarkup($"💽 Creating file [yellow]{Markup.Escape(newFileName)}[/] ([cyan]{data.Length}[/] bytes)");
+        
+        FileService.SaveFile(fullPath, data);
+        _buildGeneratedFilesForVice.Add(newFileName); // Keep only the filename, not the full path for VICE
     }
 
     /// <summary>

@@ -7,12 +7,3 @@ namespace RetroC64.App;
 public class C64App : C64AppElement
 {
 }
-
-public class C64AppBuilderSettings
-{
-    public bool EnableViceMonitorLogging { get; set; }
-
-    public bool EnableViceMonitorVerboseLogging { get; set; }
-
-
-}
