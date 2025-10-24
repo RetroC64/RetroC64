@@ -214,6 +214,8 @@ public class C64AppBuilder : IC64FileContainer
                             await Task.Delay(100, _cancellationTokenSource.Token);
 
                             monitor.Connect();
+
+                            _isViceRunning = runner.IsRunning;
                         }
                         catch (OperationCanceledException)
                         {
