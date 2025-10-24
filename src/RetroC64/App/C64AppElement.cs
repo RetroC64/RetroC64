@@ -11,16 +11,12 @@ public abstract class C64AppElement : IEnumerable<C64AppElement>
 {
     private readonly List<C64AppElement> _children = new();
     private bool _isBuilding;
-    private bool _isInitializing;
 
     protected C64AppElement()
     {
-        Id = Guid.CreateVersion7();
         Name = GetType().Name;
     }
 
-    public Guid Id { get; }
-    
     public string Name { get; set; }
     
     public IReadOnlyList<C64AppElement> Children => _children;
@@ -28,11 +24,6 @@ public abstract class C64AppElement : IEnumerable<C64AppElement>
     public void Add(C64AppElement element)
     {
         ArgumentNullException.ThrowIfNull(element);
-
-        if (!_isInitializing)
-        {
-            throw new InvalidOperationException($"Cannot add child element '{element.Name}' to '{Name}' outside of Initialize() method.");
-        }
 
         if (_isBuilding) 
         {
@@ -56,24 +47,31 @@ public abstract class C64AppElement : IEnumerable<C64AppElement>
     {
     }
 
+    internal void PrepareForInitializing()
+    {
+        _children.Clear();
+        var span = CollectionsMarshal.AsSpan(_children);
+        foreach (var child in span)
+        {
+            child.PrepareForInitializing();
+        }
+    }
+
     internal void InternalInitialize(C64AppInitializeContext context)
     {
-        _isInitializing = true;
-        try
-        {
-            _children.Clear();
+        PrepareForInitializing();
+        InitializeCore(context);
+    }
 
-            Initialize(context);
+    private void InitializeCore(C64AppInitializeContext context)
+    {
+        Name = GetType().Name; // Reset name to default in case it was changed before
+        Initialize(context);
 
-            var span = CollectionsMarshal.AsSpan(_children);
-            foreach (var child in span)
-            {
-                child.InternalInitialize(context);
-            }
-        }
-        finally
+        var span = CollectionsMarshal.AsSpan(_children);
+        foreach (var child in span)
         {
-            _isInitializing = false;
+            child.InitializeCore(context);
         }
     }
 

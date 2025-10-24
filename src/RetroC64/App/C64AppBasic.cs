@@ -15,6 +15,6 @@ public class C64AppBasic : C64AppElement
     protected override void Build(C64AppBuildContext context)
     {
         var basicBytes = _basicCompiler.Compile(Text);
-        context.AddFile(context, $"{Name}.PRG", basicBytes);
+        context.AddFile(context, $"{Name.ToLowerInvariant()}.prg", basicBytes);
     }
 }

@@ -35,8 +35,12 @@ public class C64AppDisk : C64AppElement, IC64FileContainer
         if (filename.EndsWith(".PRG", StringComparison.OrdinalIgnoreCase))
         {
             filename = filename[..^4];
+            context.InfoMarkup($"➕ Adding file [yellow]{Markup.Escape(filename)}[/] ([cyan]{data.Length}[/] bytes) to disk [yellow]{Name}[/]");
+            _disk.WriteFile(filename, data);
         }
-        context.InfoMarkup($"➕ Adding file [yellow]{Markup.Escape(filename)}[/] ([cyan]{data.Length}[/] bytes) to disk [yellow]{Name}[/]");
-        _disk.WriteFile(filename, data);
+        else
+        {
+            context.WarnMarkup($"⚠️  Skipping file [yellow]{Markup.Escape(filename)}[/] as only .PRG files are currently supported on disk [yellow]{Name}[/]");
+        }
     }
 }

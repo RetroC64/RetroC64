@@ -10,6 +10,7 @@ using RetroC64.Vice.Monitor.Commands;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Text;
+using static RetroC64.App.C64AppBuilder;
 
 namespace RetroC64.App;
 
@@ -19,8 +20,7 @@ public class C64AppBuilder : IC64FileContainer
     private readonly ILoggerFactory _loggerFactory;
     private readonly List<string> _buildGeneratedFilesForVice = new();
     private ManualResetEventSlim _hotReloadEvent = new(false);
-    private LogLevel _hotReloadLogLevel = LogLevel.Information;
-    private string? _hotReloadReason;
+    private CodeReloadEvent? _codeReloadEvent;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private bool _isAppInitialized;
     private bool _isViceRunning;
@@ -53,8 +53,9 @@ public class C64AppBuilder : IC64FileContainer
                 {
                     IncludeEventId = false,
                     IncludeNewLineBeforeMessage = false,
-                    IncludeTimestamp = false,
+                    IncludeTimestamp = true,
                     ConsoleSettings = ansiConsoleSettings,
+                    TimestampFormat = "HH:mm:ss.fff",
                     ConfigureConsole = console =>
                     {
                         // Use the same console for Spectre.Console static AnsiConsole
@@ -161,7 +162,7 @@ public class C64AppBuilder : IC64FileContainer
             if (!_cancellationTokenSource.IsCancellationRequested)
             {
                 _isViceRunning = false;
-                NotifyHotReload(LogLevel.Warning,"👾 VICE was closed unexpectedly. Restarting.");
+                NotifyHotReload(new(LogLevel.Warning,"👾 VICE was closed unexpectedly. Restarting."));
             }
         };
 
@@ -233,9 +234,11 @@ public class C64AppBuilder : IC64FileContainer
 
                     if (_buildGeneratedFilesForVice.Count > 0)
                     {
+
+                        var fileToLaunch = _buildGeneratedFilesForVice[0];
                         monitor.SendCommand(new AutostartCommand()
                         {
-                            Filename = _buildGeneratedFilesForVice[0],
+                            Filename = fileToLaunch,
                             RunAfterLoading = true
                         });
                     }
@@ -301,23 +304,24 @@ public class C64AppBuilder : IC64FileContainer
         Log.LogInformationMarkup("👀 Waiting for code changes");
         _hotReloadEvent.Wait(_cancellationTokenSource.Token);
 
-        var logMessage = _hotReloadReason ?? "♻️ Unknown reason";
-        Log.Log(_hotReloadLogLevel, logMessage);
+        Debug.Assert(_codeReloadEvent != null);
+        Log.Log(_codeReloadEvent.Level, _codeReloadEvent.Reason);
 
         _hotReloadEvent.Reset();
-        _hotReloadReason = null;
+        var action = _codeReloadEvent.Action;
+        _codeReloadEvent = null;
+        action?.Invoke();
     }
 
-    private void NotifyHotReload(LogLevel level, string reason)
+    private void NotifyHotReload(CodeReloadEvent evt)
     {
+        _codeReloadEvent = evt;
         _hotReloadEvent.Set();
-        _hotReloadLogLevel = level;
-        _hotReloadReason = reason;
     }
     
     private void HotReloadServiceOnUpdateApplicationEvent(Type[]? obj)
     {
-        NotifyHotReload(LogLevel.Information, "♻️ Code change detected! Reloading into the emulator!");
+        NotifyHotReload(new(LogLevel.Information, "♻️ Code change detected! Reloading into the emulator!"));
     }
 
     public static async Task<int> Run<TAppElement>(string[] args, C64AppBuilderConfig? config = null) where TAppElement : C64AppElement, new() => await Run(new TAppElement(), args, config);
@@ -378,6 +382,8 @@ public class C64AppBuilder : IC64FileContainer
         _buildGeneratedFilesForVice.Add(newFileName); // Keep only the filename, not the full path for VICE
     }
 
+    internal record CodeReloadEvent(LogLevel Level, string Reason, Action? Action = null);
+    
     /// <summary>
     /// Forces ANSI console output even if the terminal is redirected. Default AnsiConsoleOutput disables ANSI when the output is redirected.
     /// But if we are running under dotnet watch, we want to force ANSI.

@@ -19,6 +19,28 @@ namespace C64NETConf2025;
 
 public class Demo : C64App
 {
+    protected override void Initialize(C64AppInitializeContext context)
+    {
+        context.Settings.EnableViceMonitorLogging = false;
+        context.Settings.EnableViceMonitorVerboseLogging = false;
+
+        //Name = "PROGRAM1";
+
+        //Add(new C64AppDisk()
+        //{
+        //    new C64AppBasic()
+        //    {
+        //        Name = "PROGRAM1",
+        //        Text = """
+        //               10 X = 1
+        //               20 PRINT "HELLO, WORLD" X
+        //               30 REM X = X + 1
+        //               40 REM GOTO 20
+        //               """
+        //    }
+        //});
+    }
+
     public static async Task Create(string prgFileName)
     {
         using var basicCompiler = new C64BasicCompiler();
