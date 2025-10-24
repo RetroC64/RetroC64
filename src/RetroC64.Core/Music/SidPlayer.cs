@@ -11,12 +11,14 @@ public class SidPlayer
     private readonly SidFile _sidFile;
     private readonly C64Assembler _asm;
     private readonly ZeroPageAddress _zpPlaybackPosition;
-    private readonly Mos6502Label _musicBuffer = new("musicBuffer");
+    private readonly Mos6502Label _musicBuffer;
 
     public SidPlayer(SidFile sidFile, C64Assembler asm)
     {
         _sidFile = sidFile;
         _asm = asm;
+
+        _musicBuffer = new Mos6502Label($"musicBuffer_{sidFile.Name}", sidFile.LoadAddress);
         
         if (!sidFile.TryGetZeroPageAddresses(out var sidZpAddresses))
         {
@@ -42,7 +44,7 @@ public class SidPlayer
             .STA(_zpPlaybackPosition + 1);
 
         // Copy SID to its memory
-        _asm.CopyMemory(_musicBuffer, new Mos6502Label("sidAddress", _sidFile.EffectiveLoadAddress), (ushort)_sidFile.Data.Length);
+        //_asm.CopyMemory(_musicBuffer, new Mos6502Label("sidAddress", _sidFile.EffectiveLoadAddress), (ushort)_sidFile.Data.Length);
 
         if (_sidFile.InitAddress != 0)
         {
@@ -56,12 +58,8 @@ public class SidPlayer
 
     public ZeroPageAddress PlaybackPosition => _zpPlaybackPosition;
     
-    public void AppendMusicBuffer()
-    {
-        _asm.Label(_musicBuffer)
-            .Append(_sidFile.Data);
-    }
-    
+    public AsmBlock GetMusicBlock() => new(_musicBuffer, _sidFile.Data);
+
     public void PlayMusic()
     {
         // Call the play address

@@ -41,13 +41,10 @@ public class C64NETConf2025 : C64AppProgram
         const byte topScreenLineDefault = 0x30;
         const byte bottomScreenLineDefault = 0xF8;
 
-        //var sidFilePath = Path.Combine(AppContext.BaseDirectory, "Sanxion.sid");
         var sidRawData = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Sanxion.sid"));
-
-        //var sidFile = SidFile.Load(sidRawData);
         var sidFile = context.GetService<IC64SidService>().LoadAndConvertSidFile(context, sidRawData, new SidRelocationConfig()
         {
-            TargetAddress = 0x5000,
+            TargetAddress = 0x1000,
             ZpLow = 0xF0,
             ZpHigh = 0xFF,
         });
@@ -417,10 +414,8 @@ public class C64NETConf2025 : C64AppProgram
 
         asm.Label(out var endOfCode);
 
-        //context.Info($"Size code: {asm.SizeInBytes} bytes ( ${asm.SizeInBytes:x4})");
-        
-        asm.Label(screenBuffer);
-        var screenBufferData = ScreenBuffer.ToArray().AsSpan();
+        var screenBufferArray = ScreenBuffer.ToArray();
+        var screenBufferData = screenBufferArray.AsSpan();
 
         var musicX = 7;
         var musicY = 20;
@@ -430,36 +425,21 @@ public class C64NETConf2025 : C64AppProgram
         C64CharSet.StringToPETScreenCode($"   TITLE: {sidFile.Name.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 3) + musicX));
         C64CharSet.StringToPETScreenCode($"RELEASED: {sidFile.Released.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 4) + musicX));
 
-        asm.Append(screenBufferData);
-
-        var sinBuffer = Enumerable.Range(0, 256).Select(x => (byte)(0xC8 | (byte)Math.Round(3.5 * Math.Sin(Math.PI * 6 * x / 256) + 3.5))).ToArray();
-        asm.Label(sinTable)
-            .Append(sinBuffer);
-
-        asm.Label(spriteBuffer)
-            .Append(spriteData);
-
         const int radius = (screenBitmapHeight - sizeSpriteY) / 2;
         var oscillateRadius = (screenBitmapWidth - sizeSpriteX) / 2 - radius;
 
         var centerX = startVisibleScreenX + radius;
         var centerY = startVisibleScreenY + radius;
 
-
-        byte[] spriteSinXBuffer = Enumerable.Range(0, 256).Select(x => (byte)Math.Round(radius * Math.Sin(Math.PI * 2 * x / 256) + centerX)).ToArray();
-        asm.Label(spriteSinXTable)
-            .Append(spriteSinXBuffer);
-
-        byte[] spriteSinYBuffer = Enumerable.Range(0, 256).Select(x => (byte)Math.Round(radius * Math.Sin(Math.PI * 2 * x / 256) + centerY)).ToArray();
-        asm.Label(spriteSinYTable)
-            .Append(spriteSinYBuffer);
-
-        byte[] spriteSinCenterX = Enumerable.Range(0, 256).Select(x => (byte)Math.Round(oscillateRadius * Math.Sin(Math.PI * 2 * x / 256) + oscillateRadius)).ToArray();
-        asm.Label(spriteSinCenterTable)
-            .Append(spriteSinCenterX);
-
-        asm.Label(spriteXMsbCarryTable)
-            .Append([
+        // Arrange blocks to fit with the constraints
+        asm.ArrangeBlocks(
+            new(screenBuffer, screenBufferArray, 256),
+            new(sinTable, Enumerable.Range(0, 256).Select(x => (byte)(0xC8 | (byte)Math.Round(3.5 * Math.Sin(Math.PI * 6 * x / 256) + 3.5))).ToArray(), 256),
+            new(spriteBuffer, spriteData.ToArray()),
+            new(spriteSinXTable, Enumerable.Range(0, 256).Select(x => (byte)Math.Round(radius * Math.Sin(Math.PI * 2 * x / 256) + centerX)).ToArray(), 256),
+            new(spriteSinYTable, Enumerable.Range(0, 256).Select(x => (byte)Math.Round(radius * Math.Sin(Math.PI * 2 * x / 256) + centerY)).ToArray(), 256),
+            new(spriteSinCenterTable, Enumerable.Range(0, 256).Select(x => (byte)Math.Round(oscillateRadius * Math.Sin(Math.PI * 2 * x / 256) + oscillateRadius)).ToArray(), 256),
+            new(spriteXMsbCarryTable, [
                 0x01, 0x00, // 0 * 2
                 0x02, 0x00, // 1 * 2
                 0x04, 0x00, // 2 * 2
@@ -468,11 +448,9 @@ public class C64NETConf2025 : C64AppProgram
                 0x20, 0x00, // 5 * 2
                 0x40, 0x00, // 6 * 2
                 0x80, 0x00, // 7 * 2
-            ]);
-
-        //context.Info($"Size code + data: {asm.SizeInBytes} bytes ( ${asm.SizeInBytes:x4})");
-        // SID music buffer
-        sidPlayer.AppendMusicBuffer();
+            ]),
+            sidPlayer.GetMusicBlock() // This is the only block constrained to be at specific address $1000
+        );
     }
 
     private const byte NNNN = 0xA0;
