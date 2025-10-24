@@ -13,11 +13,16 @@ public class SidPlayer
     private readonly ZeroPageAddress _zpPlaybackPosition;
     private readonly Mos6502Label _musicBuffer = new("musicBuffer");
 
-    public SidPlayer(SidFile sidFile, C64Assembler asm, ReadOnlySpan<byte> sidZpAddresses)
+    public SidPlayer(SidFile sidFile, C64Assembler asm)
     {
         _sidFile = sidFile;
         _asm = asm;
-
+        
+        if (!sidFile.TryGetZeroPageAddresses(out var sidZpAddresses))
+        {
+            throw new InvalidOperationException($"SID file `{sidFile.Name}` does not have zero page addresses extra data. Use IC64SidService to generate this information.");
+        }
+        
         // Allocate space for SID zero page addresses
         for (var i = 0; i < sidZpAddresses.Length; i++)
         {

@@ -5,7 +5,6 @@
 using RetroC64.Basic;
 using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
-using RetroC64.Vice.Monitor.Responses;
 
 namespace RetroC64.App;
 
@@ -33,35 +32,6 @@ public abstract class C64AppProgram : C64AppElement
         {
             await C64MachineHelper.SoftReset(context, vice);
             
-            //await vice.SendCommandAsync(new ResetCommand()
-            //{
-            //    WhatToReset = ResetType.PowerCycle
-            //});
-
-            //await Task.Delay(1000);
-
-            //while (true)
-            //{
-            //    var memory = (GenericResponse)await vice.SendCommandAsync(new MemoryGetCommand()
-            //    {
-            //        BankId = new(1),
-            //        Memspace = MemSpace.MainMemory,
-            //        StartAddress = 0x2B,
-            //        EndAddress = 0x2C,
-            //    });
-
-            //    await vice.SendCommandAsync(new ExitCommand());
-
-            //    if (memory.Body[2] != 0x00 && memory.Body[3] != 0x00)
-            //    {
-            //        break;
-            //    }
-
-            //    await Task.Delay(10);
-            //}
-
-            context.Info("Loading program into memory");
-
             await vice.SendCommandAsync(new MemorySetCommand()
             {
                 BankId = new(1),
@@ -70,23 +40,16 @@ public abstract class C64AppProgram : C64AppElement
                 StartAddress = startAsm,
             });
 
-            context.Info("Setting PC and FLAGS registers");
-
             await vice.SendCommandAsync(new RegistersSetCommand() { Items = [
                 new RegisterValue(RegisterId.FLAGS, 0),
                 new RegisterValue(RegisterId.PC, startAsm)
             ] });
 
-            context.Info("Program reloaded");
-
             await vice.SendCommandAsync(new ExitCommand());
         };
-
-        //context.CustomReloadAction = null;
     }
     
     protected abstract void Build(C64AppBuildContext context, C64Assembler asm);
-
 
     protected static C64Assembler BeginAsmInit(C64Assembler asm)
     {

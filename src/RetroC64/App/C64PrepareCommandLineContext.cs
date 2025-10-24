@@ -6,9 +6,9 @@ namespace RetroC64.App;
 
 public class C64PrepareCommandLineContext : C64AppContext
 {
-    internal C64PrepareCommandLineContext(C64CommandLine commandLine)
+    internal C64PrepareCommandLineContext(C64AppBuilder builder) : base(builder)
     {
-        CommandLine = commandLine;
+        CommandLine = builder.CommandLine;
     }
 
     public C64CommandLine CommandLine { get; }

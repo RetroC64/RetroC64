@@ -9,12 +9,9 @@ namespace RetroC64.App;
 public class C64AppBuildContext : C64AppContext, IC64FileContainer
 {
     private readonly List<IC64FileContainer> _fileContainers = new();
-    private C64AppBuilder _builder;
 
-    internal C64AppBuildContext(C64AppBuilder builder)
+    internal C64AppBuildContext(C64AppBuilder builder) : base(builder)
     {
-        _builder = builder;
-        Log = builder.Log;
     }
 
     public Func<ViceMonitor, Task>? CustomReloadAction { get; set; }
@@ -45,9 +42,9 @@ public class C64AppBuildContext : C64AppContext, IC64FileContainer
 
 public class C64AppInitializeContext : C64AppContext
 {
-    internal C64AppInitializeContext(C64AppBuilderSettings settings)
+    internal C64AppInitializeContext(C64AppBuilder builder) : base(builder)
     {
-        Settings = settings;
+        Settings = builder.Settings;
     }
 
     public C64AppBuilderSettings Settings { get; }

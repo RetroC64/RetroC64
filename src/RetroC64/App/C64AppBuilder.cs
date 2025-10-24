@@ -3,6 +3,7 @@
 // See license.txt file in the project root for full license information.
 
 using Lunet.Extensions.Logging.SpectreConsole;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RetroC64.Vice;
 using RetroC64.Vice.Monitor;
@@ -25,7 +26,8 @@ public class C64AppBuilder : IC64FileContainer
     private bool _isAppInitialized;
     private bool _isViceRunning;
     private bool _isLiveFileAutostarted = false;
-
+    private ServiceProvider? _serviceProvider;
+    
     private Func<ViceMonitor, Task>? _customCodeReloadAction;
 
     internal static readonly bool IsDotNetWatch = "1".Equals(Environment.GetEnvironmentVariable("DOTNET_WATCH"), StringComparison.Ordinal);
@@ -88,10 +90,7 @@ public class C64AppBuilder : IC64FileContainer
     {
         if (!_commandLinePrepared)
         {
-            var prepareContext = new C64PrepareCommandLineContext(CommandLine)
-            {
-                Log = Log
-            };
+            var prepareContext = new C64PrepareCommandLineContext(this);
             RootElement.InternalPrepareCommandLine(prepareContext);
             _commandLinePrepared = true;
         }
@@ -106,7 +105,7 @@ public class C64AppBuilder : IC64FileContainer
         Log.LogInformationMarkup("⚙️ Initializing...");
         try
         {
-            var initContext = new C64AppInitializeContext(Settings);
+            var initContext = new C64AppInitializeContext(this);
             RootElement.InternalInitialize(initContext);
             _isAppInitialized = true;
         }
@@ -117,6 +116,23 @@ public class C64AppBuilder : IC64FileContainer
         }
 
         return true;
+    }
+
+    internal ServiceProvider GetOrCreateServiceProvider()
+    {
+        if (_serviceProvider is null)
+        {
+            ServiceCollection services = new();
+
+            services.AddSingleton<IC64SidService>(new C64SidService());
+            services.AddSingleton<ILoggerFactory>(_loggerFactory);
+
+            // TODO: Allow to plug services from AppElements and settings
+
+            _serviceProvider = services.BuildServiceProvider();
+        }
+
+        return _serviceProvider;
     }
     
     public async Task BuildAsync()
@@ -417,7 +433,7 @@ public class C64AppBuilder : IC64FileContainer
         public bool IsTerminal => true;
 
         /// <inheritdoc/>
-        public int Width => 100;
+        public int Width => 120;
 
         /// <inheritdoc/>
         public int Height => 40;

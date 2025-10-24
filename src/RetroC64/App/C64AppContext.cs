@@ -3,14 +3,35 @@
 // See license.txt file in the project root for full license information.
 
 using Lunet.Extensions.Logging.SpectreConsole;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace RetroC64.App;
 
 public abstract class C64AppContext
 {
-    public ILogger Log { get; internal set; } = NullLogger.Instance;
+    private readonly C64AppBuilder _builder;
+
+    private protected C64AppContext(C64AppBuilder builder)
+    {
+        _builder = builder;
+        Services = builder.GetOrCreateServiceProvider();
+        Log = builder.Log;
+    }
+
+    public IKeyedServiceProvider Services { get; }
+
+    public TIService GetService<TIService>()
+    {
+        var service = Services.GetService<TIService>();
+        if (service == null)
+        {
+            throw new InvalidOperationException($"Service of type '{typeof(TIService).Name}' not found");
+        }
+        return service;
+    }
+
+    public ILogger Log { get; }
 
     public void Trace(string message) => Log.LogTrace(message);
 

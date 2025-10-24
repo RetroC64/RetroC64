@@ -41,11 +41,18 @@ public class C64NETConf2025 : C64AppProgram
         const byte topScreenLineDefault = 0x30;
         const byte bottomScreenLineDefault = 0xF8;
 
-        var sidFilePath = Path.Combine(AppContext.BaseDirectory, "Sanxion.sid");
-        var buffer = File.ReadAllBytes(sidFilePath);
-        var sidFile = SidFile.Load(buffer);
-        var sidPlayer = new SidPlayer(sidFile, asm, [0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xfb, 0xfc, 0xfd, 0xfe]);
-        context.InfoMarkup($"SID Load address 2 ${sidFile.LoadAddress:x4}");
+        //var sidFilePath = Path.Combine(AppContext.BaseDirectory, "Sanxion.sid");
+        var sidRawData = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Sanxion.sid"));
+
+        //var sidFile = SidFile.Load(sidRawData);
+        var sidFile = context.GetService<IC64SidService>().LoadAndConvertSidFile(context, sidRawData, new SidRelocationConfig()
+        {
+            TargetAddress = 0x5000,
+            ZpLow = 0xF0,
+            ZpHigh = 0xFF,
+        });
+
+        var sidPlayer = new SidPlayer(sidFile, asm);
 
         asm.ZpAlloc(out var zpCharPerFrame)
             .ZpAlloc(out var zpBaseSinIndex)
@@ -410,7 +417,7 @@ public class C64NETConf2025 : C64AppProgram
 
         asm.Label(out var endOfCode);
 
-        context.Info($"Size code: {asm.SizeInBytes} bytes ( ${asm.SizeInBytes:x4})");
+        //context.Info($"Size code: {asm.SizeInBytes} bytes ( ${asm.SizeInBytes:x4})");
         
         asm.Label(screenBuffer);
         var screenBufferData = ScreenBuffer.ToArray().AsSpan();
@@ -463,14 +470,9 @@ public class C64NETConf2025 : C64AppProgram
                 0x80, 0x00, // 7 * 2
             ]);
 
-        context.Info($"Size code + data: {asm.SizeInBytes} bytes ( ${asm.SizeInBytes:x4})");
+        //context.Info($"Size code + data: {asm.SizeInBytes} bytes ( ${asm.SizeInBytes:x4})");
         // SID music buffer
         sidPlayer.AppendMusicBuffer();
-
-        // ResponseType: RegistersAvailable, Error: None, RequestId: 0x00000001, Registers: [RegisterName { RegisterId = 3, SizeInBits = 16, Name = PC }, RegisterName { RegisterId = 0, SizeInBits = 8, Name = A }, RegisterName { RegisterId = 1, SizeInBits = 8, Name = X }, RegisterName { RegisterId = 2, SizeInBits = 8, Name = Y }, RegisterName { RegisterId = 4, SizeInBits = 8, Name = SP }, RegisterName { RegisterId = 55, SizeInBits = 8, Name = 00 }, RegisterName { RegisterId = 56, SizeInBits = 8, Name = 01 }, RegisterName { RegisterId = 5, SizeInBits = 8, Name = FL }, RegisterName { RegisterId = 53, SizeInBits = 16, Name = LIN }, RegisterName { RegisterId = 54, SizeInBits = 16, Name = CYC }]
-
-        // monitor.SendCommand(new RegistersSetCommand() { Items = [new RegisterValue(RegisterId.PC, startOfCode.Address)] });
-        // monitor.SendCommand(new ExitCommand());
     }
 
     private const byte NNNN = 0xA0;
