@@ -173,7 +173,7 @@ public class ViceRunner : IDisposable
         {
             if (!processStarted)
             {
-                throw new ViceException($"Could not start VICE executable {_process.StartInfo.FileName}", exceptionAtStart);
+                throw new ViceException($"Could not start VICE executable: {_process.StartInfo.FileName}. Have you setup correctly RETROC64_VICE_BIN env variable?", exceptionAtStart);
             }
         }
 
@@ -252,13 +252,13 @@ public class ViceRunner : IDisposable
     }
 
     /// <summary>
-    /// Finds the VICE executable to use, checking the VICE_BIN environment variable or defaulting to platform-specific names.
+    /// Finds the VICE executable to use, checking the RETROC64_VICE_BIN environment variable or defaulting to platform-specific names.
     /// </summary>
     /// <returns>The path or name of the VICE executable.</returns>
     private static string FindViceExecutable()
     {
-        // We offer a way to use an environment variable to set up the location of the VICE_BIN
-        var viceBinary = Environment.GetEnvironmentVariable("VICE_BIN");
+        // We offer a way to use an environment variable to set up the location of the RETROC64_VICE_BIN
+        var viceBinary = Environment.GetEnvironmentVariable("RETROC64_VICE_BIN");
         // We check for an explicit path
         if (File.Exists(viceBinary))
         {

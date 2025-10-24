@@ -20,9 +20,12 @@ public class C64AppBuilder : IC64FileContainer
     private readonly ILoggerFactory _loggerFactory;
     private readonly List<string> _buildGeneratedFiles = new();
     private ManualResetEventSlim _hotReloadEvent = new(false);
+    private LogLevel _hotReloadLogLevel = LogLevel.Information;
+    private string? _hotReloadReason;
     private int _buildCount;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private bool _isAppInitialized;
+    private bool _isViceRunning;
 
     internal static readonly bool IsDotNetWatch = "1".Equals(Environment.GetEnvironmentVariable("DOTNET_WATCH"), StringComparison.Ordinal);
 
@@ -152,39 +155,15 @@ public class C64AppBuilder : IC64FileContainer
         var runner = new ViceRunner();
         var monitor = new ViceMonitor();
 
-        runner.ExecutableName = @"C:\code\c64\GTK3VICE-3.9-win64\bin\x64sc.exe";
         runner.Exited += async () =>
         {
             if (!_cancellationTokenSource.IsCancellationRequested)
             {
-                Log.LogWarning("👾 VICE was closed unexpectedly. Restarting.");
-                try
-                {
-                    try
-                    {
-                        monitor.Disconnect();
-                    } catch
-                    {
-                        // Ignore
-                    }
-
-                    await runner.ShutdownAsync();
-
-                    runner.Start();
-                    await Task.Delay(100);
-                    monitor.Connect();
-
-                    // Notify a reload
-                    _hotReloadEvent.Set();
-                }
-                catch (Exception ex)
-                {
-                    Log.LogErrorMarkup($"🔥 [red]Failed to restart VICE:[/] {Markup.Escape(ex.Message)}");
-                    _cancellationTokenSource.Cancel();
-                }
+                _isViceRunning = false;
+                NotifyHotReload(LogLevel.Warning,"👾 VICE was closed unexpectedly. Restarting.");
             }
         };
-        
+
         var longTaskRedirect = Task.Run(async () =>
         {
             try
@@ -207,45 +186,67 @@ public class C64AppBuilder : IC64FileContainer
             {
                 // Ignore
             }
-        });
+        }, _cancellationTokenSource.Token);
         
         try
         {
-            runner.Start();
-            await Task.Delay(100);
-            monitor.Connect();
-
             while (!_cancellationTokenSource.IsCancellationRequested)
             {
-                await BuildAsync();
-
-                //await monitor.SendCommandAsync(new ResetCommand()
-                //{
-                //    WhatToReset = ResetType.PowerCycle
-                //});
-
-                if (_buildGeneratedFiles.Count > 0)
-                {
-                    monitor.SendCommand(new AutostartCommand()
-                    {
-                        Filename = _buildGeneratedFiles[0],
-                        RunAfterLoading = true
-                    });
-                }
-
-                Log.LogInformationMarkup("👀 Waiting for code changes");
                 try
                 {
-                    _hotReloadEvent.Wait(_cancellationTokenSource.Token);
+                    if (!_isViceRunning)
+                    {
+                        try
+                        {
+                            try
+                            {
+                                monitor.Disconnect();
+                            }
+                            catch
+                            {
+                                // Ignore
+                            }
+
+                            await runner.ShutdownAsync();
+
+                            runner.Start();
+
+                            await Task.Delay(100, _cancellationTokenSource.Token);
+
+                            monitor.Connect();
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.LogErrorMarkup($"🚫 [red]Failed to start/restart VICE:[/] {Markup.Escape(ex.Message)}");
+                            break;
+                        }
+                    }
+                    
+                    await BuildAsync();
+
+                    if (_buildGeneratedFiles.Count > 0)
+                    {
+                        monitor.SendCommand(new AutostartCommand()
+                        {
+                            Filename = _buildGeneratedFiles[0],
+                            RunAfterLoading = true
+                        });
+                    }
+
+                    WaitForHotReload();
                 }
                 catch (OperationCanceledException)
                 {
                     break;
                 }
-
-                Log.LogInformationMarkup("♻️ Code change detected! Reloading into the emulator!");
-
-                _hotReloadEvent.Reset();
+                catch (Exception ex)
+                {
+                    Log.LogError($"⛔ An unexpected error occured. {ex.Message}");
+                }
 
                 //var result = await monitor.SendCommandAsync(new RegistersAvailableCommand());
                 //Console.WriteLine(result);
@@ -260,28 +261,60 @@ public class C64AppBuilder : IC64FileContainer
 
             Log.LogInformationMarkup("🛑 Shutting down RetroC64. See you in [cyan]6502[/] cycles!");
 
-            // Disconnect the monitor first
-            monitor.Disconnect();
-
-            await runner.ShutdownAsync();
         }
         finally
         {
-            monitor.Dispose();
+            // Disconnect the monitor first
+            try
+            {
+                monitor.Disconnect();
+            }
+            catch
+            {
+                // ignore
+            }
+
+            try
+            {
+                await runner.ShutdownAsync();
+            }
+            catch
+            {
+                // ignore
+            }
         }
     }
 
     private void OnConsoleOnCancelKeyPress(object? sender, ConsoleCancelEventArgs args)
     {
+        Console.CancelKeyPress -= OnConsoleOnCancelKeyPress; // Prevent multiple calls
+        args.Cancel = true;
         Log.LogWarning("⏹️ Cancellation requested");
         _cancellationTokenSource.Cancel();
-        args.Cancel = true;
-        Console.CancelKeyPress -= OnConsoleOnCancelKeyPress; // Prevent multiple calls
     }
 
-    private void HotReloadServiceOnUpdateApplicationEvent(Type[]? obj)
+    private void WaitForHotReload()
+    {
+        Log.LogInformationMarkup("👀 Waiting for code changes");
+        _hotReloadEvent.Wait(_cancellationTokenSource.Token);
+
+        var logMessage = _hotReloadReason ?? "♻️ Unknown reason";
+        Log.Log(_hotReloadLogLevel, logMessage);
+
+        _hotReloadEvent.Reset();
+        _hotReloadReason = null;
+    }
+
+    private void NotifyHotReload(LogLevel level, string reason)
     {
         _hotReloadEvent.Set();
+        _hotReloadLogLevel = level;
+        _hotReloadReason = reason;
+    }
+    
+    private void HotReloadServiceOnUpdateApplicationEvent(Type[]? obj)
+    {
+        NotifyHotReload(LogLevel.Information, "♻️ Code change detected! Reloading into the emulator!");
     }
 
     public static async Task<int> Run<TAppElement>(string[] args, C64AppBuilderConfig? config = null) where TAppElement : C64AppElement, new() => await Run(new TAppElement(), args, config);
