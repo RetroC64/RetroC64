@@ -102,7 +102,7 @@ public class Demo : C64App
             .STA(screenBufferOffset)
             .STA(screenBufferOffset + 1);
 
-        asm.LDA_Imm(VIC2Control2Flags.ColumnSelect)
+        asm.LDA_Imm(VIC2Control2Flags.Columns40)
             .STA(VIC2_CONTROL2)
 
             .LDA_Imm(COLOR_LIGHT_BLUE)
@@ -383,7 +383,7 @@ public class Demo : C64App
             .DEC(zpStartingIrqLine)
 
             // Reset color and scroll
-            .LDA_Imm(VIC2Control2Flags.ColumnSelect)
+            .LDA_Imm(VIC2Control2Flags.Columns40)
             .STA(VIC2_CONTROL2)
             .LDA_Imm(COLOR_LIGHT_BLUE)
             .STA(VIC2_BG_COLOR0)

@@ -871,7 +871,7 @@ public static class C64Registers
         /// <summary>Bits 0-2: Fine horizontal scroll (0-7 pixels).</summary>
         XScroll = 0x07,
         /// <summary>0=38 columns, 1=40 columns.</summary>
-        ColumnSelect = 1 << 3,
+        Columns40 = 1 << 3,
         /// <summary>1=Multicolor mode.</summary>
         MulticolorMode = 1 << 4,
     }
