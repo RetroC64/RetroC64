@@ -24,6 +24,9 @@ public class C64AppBuilder : IC64FileContainer
     private readonly CancellationTokenSource _cancellationTokenSource;
     private bool _isAppInitialized;
     private bool _isViceRunning;
+    private bool _isLiveFileAutostarted = false;
+
+    private Func<ViceMonitor, Task>? _customCodeReloadAction;
 
     internal static readonly bool IsDotNetWatch = "1".Equals(Environment.GetEnvironmentVariable("DOTNET_WATCH"), StringComparison.Ordinal);
 
@@ -131,8 +134,10 @@ public class C64AppBuilder : IC64FileContainer
             var clock = Stopwatch.StartNew();
             var context = new C64AppBuildContext(this);
             context.PushFileContainer(this);
+            _customCodeReloadAction = null;
             RootElement.InternalBuild(context);
             Log.LogInformationMarkup($"⏱️ Build in [cyan]{clock.Elapsed.TotalMilliseconds:0.0}[/]ms");
+            _customCodeReloadAction = context.CustomReloadAction;
         }
         catch (Exception ex)
         {
@@ -145,6 +150,8 @@ public class C64AppBuilder : IC64FileContainer
 
     public async Task LiveAsync()
     {
+        _isLiveFileAutostarted = false;
+
         // We start to initialize the app elements (to allow to configure global settings like vice monitor)
         TryInitializeAppElements();
 
@@ -217,6 +224,7 @@ public class C64AppBuilder : IC64FileContainer
 
                             monitor.Connect();
 
+                            _isLiveFileAutostarted = false;
                             _isViceRunning = runner.IsRunning;
                         }
                         catch (OperationCanceledException)
@@ -234,13 +242,21 @@ public class C64AppBuilder : IC64FileContainer
 
                     if (_buildGeneratedFilesForVice.Count > 0)
                     {
-
-                        var fileToLaunch = _buildGeneratedFilesForVice[0];
-                        monitor.SendCommand(new AutostartCommand()
+                        if (!_isLiveFileAutostarted || _customCodeReloadAction is null)
                         {
-                            Filename = fileToLaunch,
-                            RunAfterLoading = true
-                        });
+                            var fileToLaunch = _buildGeneratedFilesForVice[0];
+                            monitor.SendCommand(new AutostartCommand()
+                            {
+                                Filename = fileToLaunch,
+                                RunAfterLoading = true
+                            });
+
+                            _isLiveFileAutostarted = true;
+                        }
+                        else
+                        {
+                            await _customCodeReloadAction(monitor);
+                        }
                     }
 
                     WaitForHotReload();

@@ -36,7 +36,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static C64Assembler SetupRamAccess(this C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.FullRamWithKernal)
+    public static C64Assembler SetupRamAccess(this C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.FullRam)
         => asm
             .LDA_Imm(defaultFlags)
             .STA(C64_CPU_PORT); // Store in $01, which is the RAM setup register for C64

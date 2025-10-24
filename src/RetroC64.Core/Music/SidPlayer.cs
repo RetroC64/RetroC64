@@ -13,7 +13,7 @@ public class SidPlayer
     private readonly ZeroPageAddress _zpPlaybackPosition;
     private readonly Mos6502Label _musicBuffer = new("musicBuffer");
 
-    public SidPlayer(SidFile sidFile, C64Assembler asm, ZeroPageAllocator zpAlloc, ReadOnlySpan<byte> sidZpAddresses)
+    public SidPlayer(SidFile sidFile, C64Assembler asm, ReadOnlySpan<byte> sidZpAddresses)
     {
         _sidFile = sidFile;
         _asm = asm;
@@ -22,10 +22,10 @@ public class SidPlayer
         for (var i = 0; i < sidZpAddresses.Length; i++)
         {
             var addr = sidZpAddresses[i];
-            zpAlloc.Reserve(addr, $"zpSidPlayer{i}");
+            asm.Zp.Reserve(addr, $"zpSidPlayer{i}");
         }
-        
-        zpAlloc.AllocateRange(2, out var zpMusicPosition);
+
+        asm.Zp.AllocateRange(2, out var zpMusicPosition);
         _zpPlaybackPosition = zpMusicPosition[0];
     }
 

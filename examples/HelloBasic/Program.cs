@@ -1,8 +1,14 @@
+// Copyright (c) Alexandre Mutel. All rights reserved.
+// Licensed under the BSD-Clause 2 license.
+// See license.txt file in the project root for full license information.
 using RetroC64.App;
 
 return await C64AppBuilder.Run<HelloBasic>(args);
 
-class HelloBasic : C64AppBasic
+/// <summary>
+/// Represents a BASIC program that prints "HELLO, WORLD" and demonstrates simple variable usage for RetroC64.
+/// </summary>
+internal class HelloBasic : C64AppBasic
 {
     protected override void Initialize(C64AppInitializeContext context)
     {

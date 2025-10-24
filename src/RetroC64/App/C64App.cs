@@ -4,6 +4,7 @@
 
 namespace RetroC64.App;
 
-public class C64App : C64AppElement
+public abstract class C64App : C64AppElement
 {
+    protected abstract override void Initialize(C64AppInitializeContext context);
 }

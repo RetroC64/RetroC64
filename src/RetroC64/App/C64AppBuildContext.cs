@@ -2,6 +2,8 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using RetroC64.Vice.Monitor;
+
 namespace RetroC64.App;
 
 public class C64AppBuildContext : C64AppContext, IC64FileContainer
@@ -14,7 +16,9 @@ public class C64AppBuildContext : C64AppContext, IC64FileContainer
         _builder = builder;
         Log = builder.Log;
     }
-    
+
+    public Func<ViceMonitor, Task>? CustomReloadAction { get; set; }
+
     public IC64FileContainer GetCurrentFileContainer()
     {
         if (_fileContainers.Count == 0)
@@ -23,6 +27,7 @@ public class C64AppBuildContext : C64AppContext, IC64FileContainer
         }
         return _fileContainers[^1];
     }
+    
 
     public void PushFileContainer(IC64FileContainer container)
     {
