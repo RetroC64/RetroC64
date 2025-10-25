@@ -16,8 +16,17 @@ namespace RetroC64.App;
 /// </summary>
 internal class C64SidService : IC64SidService
 {
-    private readonly Dictionary<UInt128, SidFile> _cache = new();
+    private readonly IC64CacheService _cacheService;
 
+    /// <summary>
+    /// Initializes a new instance of the C64SidService class using the specified cache service.
+    /// </summary>
+    /// <param name="cacheService">The cache service to be used for storing and retrieving C64 SID data. Cannot be null.</param>
+    public C64SidService(IC64CacheService cacheService)
+    {
+        _cacheService = cacheService;
+    }
+    
     /// <inheritdoc />
     public SidFile LoadAndConvertSidFile(C64AppContext context, byte[] sidFileBytes, SidRelocationConfig relocationConfig)
     {
@@ -42,38 +51,48 @@ internal class C64SidService : IC64SidService
         var hash = XxHash128.HashToUInt128(span);
         ArrayPool<byte>.Shared.Return(buffer);
 
-        if (_cache.TryGetValue(hash, out var cachedSidFile))
-        {
-            return cachedSidFile;
-        }
 
-        var relocator = new SidRelocator();
-        SidFile sidFile;
+        var data = _cacheService.GetCachedOrBuild("sid", hash, () =>
+            {
+                var relocator = new SidRelocator();
+                SidFile sidFile;
+
+                try
+                {
+                    sidFile = SidFile.Load(sidFileBytes);
+                }
+                catch (Exception ex)
+                {
+                    throw new C64AppException("Failed to load SID file.", ex);
+                }
+
+                try
+                {
+                    var zpRelocateText = relocationConfig.ZpRelocate ? $", ZP [cyan]${relocationConfig.ZpLow:x2}[/]-[cyan]${relocationConfig.ZpHigh:x2}[/]" : "";
+                    context.InfoMarkup($"🎶 Converting SID File [yellow]{Markup.Escape(sidFile.Name)}[/] to relocation [cyan]${relocationConfig.TargetAddress:x4}[/]{zpRelocateText}");
+                    var clock = Stopwatch.StartNew();
+                    relocationConfig.LogOutput = TextWriter.Null; // TODO: Add support for trace logging
+                    var relocatedSidFile = relocator.Relocate(sidFile, relocationConfig);
+                    clock.Stop();
+
+                    var stream = new MemoryStream();
+                    relocatedSidFile.Save(stream);
+                    return stream.ToArray();
+                }
+                catch (Exception ex)
+                {
+                    throw new C64AppException("Failed to relocate SID file.", ex);
+                }
+            }
+        );
 
         try
         {
-            sidFile = SidFile.Load(sidFileBytes);
+            return SidFile.Load(data);
         }
         catch (Exception ex)
         {
-            throw new C64AppException("Failed to load SID file.", ex);
-        }
-
-        try
-        {
-            var zpRelocateText = relocationConfig.ZpRelocate ? $", ZP [cyan]${relocationConfig.ZpLow:x2}[/]-[cyan]${relocationConfig.ZpHigh:x2}[/]" : "";
-            context.InfoMarkup($"🎶 Converting SID File [yellow]{Markup.Escape(sidFile.Name)}[/] to relocation [cyan]${relocationConfig.TargetAddress:x4}[/]{zpRelocateText}");
-            var clock = Stopwatch.StartNew();
-            relocationConfig.LogOutput = TextWriter.Null; // TODO: Add support for trace logging
-            var relocatedSidFile = relocator.Relocate(sidFile, relocationConfig);
-            clock.Stop();
-            context.InfoMarkup($"✅ SID File [yellow]{Markup.Escape(sidFile.Name)}[/] converted in [cyan]{clock.ElapsedMilliseconds}[/]ms.");
-            _cache[hash] = relocatedSidFile;
-            return relocatedSidFile;
-        }
-        catch (Exception ex)
-        {
-            throw new C64AppException("Failed to relocate SID file.", ex);
+            throw new C64AppException("Failed to load relocated SID file from cache.", ex);
         }
     }
 }

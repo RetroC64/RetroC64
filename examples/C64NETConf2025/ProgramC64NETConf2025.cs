@@ -22,6 +22,7 @@ public class C64NETConf2025 : C64AppAsmProgram
     
     protected override Mos6502Label Build(C64AppBuildContext context, C64Assembler asm)
     {
+        // Select which showcase of the demo to build
         var part = DemoPart.Case3_Full;
 
         // Force the screen buffer at $1000 as it is by default the Character ROM area by default
@@ -30,7 +31,6 @@ public class C64NETConf2025 : C64AppAsmProgram
         
         asm
             .LabelForward(out var screenBufferOffset)
-            .LabelForward(out var musicBuffer)
             .LabelForward(out var spriteSinXTable)
             .LabelForward(out var spriteSinYTable)
             .LabelForward(out var spriteSinCenterTable)
@@ -114,7 +114,7 @@ public class C64NETConf2025 : C64AppAsmProgram
             asm.CopyMemoryBy256BytesBlock(screenBuffer, SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
         }
 
-        // Sprite Address
+        // Sprite Address / 64 relative to the start of bank 0 ($0000)
         var spriteAddr64 = (spriteBuffer / 64).LowByte();
         asm.LDA_Imm(spriteAddr64);
         for (int i = 0; i < 8; i++)

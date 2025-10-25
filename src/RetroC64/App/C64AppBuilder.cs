@@ -338,7 +338,9 @@ public class C64AppBuilder : IC64FileContainer
         {
             ServiceCollection services = new();
 
-            services.AddSingleton<IC64SidService>(new C64SidService());
+            services.AddSingleton(this);
+            services.AddSingleton<IC64CacheService, C64CacheService>();
+            services.AddSingleton<IC64SidService, C64SidService>();
             services.AddSingleton<ILoggerFactory>(_loggerFactory);
 
             // TODO: Allow to plug services from AppElements and settings

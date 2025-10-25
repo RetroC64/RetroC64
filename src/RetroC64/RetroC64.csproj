@@ -33,6 +33,7 @@
 
   <ItemGroup>
     <PackageReference Include="Lunet.Extensions.Logging.SpectreConsole" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="System.IO.Hashing" />
     <!-- Disabled to make it compatible with code reload for now -->
