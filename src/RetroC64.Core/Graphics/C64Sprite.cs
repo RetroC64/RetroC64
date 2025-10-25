@@ -46,6 +46,10 @@ public class C64Sprite : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// Returns a span containing the bitwise representation of the current value.
+    /// </summary>
+    /// <returns>A span of 64 bytes representing the bits of the value.</returns>
     public Span<byte> ToBits()
     {
         var output = new byte[64];

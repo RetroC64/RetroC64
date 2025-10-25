@@ -13,10 +13,11 @@ namespace RetroC64;
 /// </remarks>
 public static class C64Registers
 {
-    // VIC-II (Video Interface Chip) Registers
+    public const ushort SCREEN_CHARACTER_ADDRESS_DEFAULT = 0x0400;
 
     public const ushort SPRITE0_ADDRESS_DEFAULT = 0x07F8;
 
+    // VIC-II (Video Interface Chip) Registers
     /// <summary>
     /// Sprite #0 X-coordinate (bits 0-7). Use <see cref="VIC2_SPRITE_X_MSB"/> for bit 8.
     /// </summary>
@@ -139,10 +140,10 @@ public static class C64Registers
     /// Memory setup register.
     /// Bits 1-3: Pointer to character/bitmap memory (see docs).
     /// Bits 4-7: Pointer to screen memory (see docs).
-    /// See <see cref="VIC2MemoryFlags"/>.
+    /// See <see cref="VIC2MemoryFlags"/> with <see cref="VIC2CharacterMemory"/> and <see cref="VIC2ScreenMemory"/>.
     /// </summary>
     public const ushort VIC2_MEMORY_POINTERS = 0xD018;
-
+    
     /// <summary>
     /// Interrupt status register.
     /// Bit 0: Raster interrupt occurred.
@@ -658,9 +659,12 @@ public static class C64Registers
     public enum CIAPortAFlags : byte
     {
         /// <summary>Bit 0: VIC bank select bit 0.</summary>
-        VicBank0 = 1 << 0,
+        VicBankMask = 3 << 0,
         /// <summary>Bit 1: VIC bank select bit 1.</summary>
+        VicBank3 = 0,
+        VicBank2 = 1 << 0,
         VicBank1 = 1 << 1,
+        VicBank0 = 3,
         /// <summary>Bit 2: RS232 TXD.</summary>
         RS232Txd = 1 << 2,
         /// <summary>Bit 3: Serial ATN OUT. 0 = High, 1= Low.</summary>
@@ -924,23 +928,61 @@ public static class C64Registers
         /// <summary>No memory pointer flag.</summary>
         None = 0,
         /// <summary>Character/bitmap memory pointer bit 1.</summary>
-        CharacterMemory0 = 1 << 1,
+        CharacterMemoryBit1 = 1 << 1,
         /// <summary>Character/bitmap memory pointer bit 2.</summary>
-        CharacterMemory1 = 1 << 2,
+        CharacterMemoryBit2 = 1 << 2,
         /// <summary>Character/bitmap memory pointer bit 3.</summary>
-        CharacterMemory2 = 1 << 3,
+        CharacterMemoryBit3 = 1 << 3,
         /// <summary>Bits 1-3: Character/bitmap memory pointer.</summary>
-        CharacterMemory = 0x0E,
+        CharacterMemoryMask = 0b1110,
         /// <summary>Screen memory pointer bit 4.</summary>
-        VideoMatrix0 = 1 << 4,
+        ScreenMemoryBit4 = 1 << 4,
         /// <summary>Screen memory pointer bit 5.</summary>
-        VideoMatrix1 = 1 << 5,
+        ScreenMemoryBit5 = 1 << 5,
         /// <summary>Screen memory pointer bit 6.</summary>
-        VideoMatrix2 = 1 << 6,
+        ScreenMemoryBit6 = 1 << 6,
         /// <summary>Screen memory pointer bit 7.</summary>
-        VideoMatrix3 = 1 << 7,
+        ScreenMemoryBit7 = 1 << 7,
         /// <summary>Bits 4-7: Screen memory pointer.</summary>
-        VideoMatrix = 0xF0,
+        ScreenMemoryMask = 0xF0,
+    }
+
+    /// <summary>
+    /// Enum to cast to <see cref="VIC2MemoryFlags"/>.
+    /// </summary>
+    public enum VIC2CharacterMemory : byte
+    {
+        Range_0000_07FF = 0,
+        Range_0800_0FFF = 0b001 << 1,
+        Range_1000_17FF = 0b010 << 1,
+        Range_1800_1FFF = 0b011 << 1,
+        Range_2000_27FF = 0b100 << 1,
+        Range_2800_2FFF = 0b101 << 1,
+        Range_3000_37FF = 0b110 << 1,
+        Range_3800_3FFF = 0b111 << 1,
+    }
+
+    /// <summary>
+    /// Enum to cast to <see cref="VIC2MemoryFlags"/>.
+    /// </summary>
+    public enum VIC2ScreenMemory : byte
+    {
+        Range_0000_03FF = 0,
+        Range_0400_07FF = 1 << 4,
+        Range_0800_0BFF = 2 << 4,
+        Range_0C00_0FFF = 3 << 4,
+        Range_1000_13FF = 4 << 4,
+        Range_1400_17FF = 5 << 4,
+        Range_1800_1BFF = 6 << 4,
+        Range_1C00_1FFF = 7 << 4,
+        Range_2000_23FF = 8 << 4,
+        Range_2400_27FF = 9 << 4,
+        Range_2800_2BFF = 10 << 4,
+        Range_2C00_2FFF = 11 << 4,
+        Range_3000_33FF = 12 << 4,
+        Range_3400_37FF = 13 << 4,
+        Range_3800_3BFF = 14 << 4,
+        Range_3C00_3FFF = 15 << 4,
     }
 
     /// <summary>

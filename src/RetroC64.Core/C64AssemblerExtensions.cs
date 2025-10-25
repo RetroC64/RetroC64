@@ -72,14 +72,16 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifiers the A and X registers.
     /// </remarks>
-    public static C64Assembler ClearMemoryBy256BytesBlock(this C64Assembler asm, ushort address, ushort count, byte value = 0)
+    public static C64Assembler ClearMemoryBy256BytesBlock(this C64Assembler asm, ushort address, byte count, byte value = 0)
     {
         if (count == 0) return asm;
 
         asm
             .LDA_Imm(value) // Load the value to clear
-            .LDX_Imm(0) // Initialize X to 0
-            .Label(out var loop);
+            .LDX_Imm(0); // Initialize X to 0
+
+        asm
+            .Label(out var loop_ClearMemoryBy256BytesBlock);
 
         for (int i = 0; i < count; i++)
         {
@@ -88,9 +90,43 @@ public static class C64AssemblerExtensions
 
         asm
             .DEX()
-            .BNE(loop); // If X is not zero, repeat the loop
+            .BNE(loop_ClearMemoryBy256BytesBlock); // If X is not zero, repeat the loop
 
         return asm;
+    }
+
+    /// <summary>
+    /// Generates 6502 assembly instructions to copy memory in 256-byte blocks from a source label to a destination
+    /// address.
+    /// </summary>
+    /// <param name="asm">The assembler instance used to emit instructions.</param>
+    /// <param name="src">The source memory label from which data will be copied.</param>
+    /// <param name="dstAddress">The starting address in memory where the data will be copied to.</param>
+    /// <param name="count">The number of 256-byte blocks to copy. If zero, no instructions are generated.</param>
+    /// <returns>The assembler instance with the copy instructions appended.</returns>
+    /// <remarks>
+    /// Modifiers the A and X registers.
+    /// </remarks>
+    public static C64Assembler CopyMemoryBy256BytesBlock(this C64Assembler asm, Mos6502Label src, ushort dstAddress, byte count)
+    {
+        if (count == 0) return asm;
+        asm
+            .LDX_Imm(0); // Initialize X to 0
+
+        asm
+            .Label(out var loop_CopyMemoryBy256BytesBlock);
+
+        for (int i = 0; i < count; i++)
+        {
+            asm.LDA(src + (short)(i * 256), X) // Load from source
+                .STA((ushort)(dstAddress + i * 256), X); // Store to destination
+        }
+
+        asm
+            .DEX()
+            .BNE(loop_CopyMemoryBy256BytesBlock); // If X is not zero, repeat the loop
+        return asm;
+
     }
 
     /// <summary>

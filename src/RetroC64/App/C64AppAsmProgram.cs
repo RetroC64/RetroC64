@@ -105,7 +105,7 @@ public abstract class C64AppAsmProgram : C64AppElement
     /// </summary>
     /// <param name="asm">Assembler.</param>
     /// <returns>The same assembler.</returns>
-    protected C64Assembler EndAsmInit(C64Assembler asm)
+    protected C64Assembler EndAsmInitAndInfiniteLoop(C64Assembler asm)
     {
         return asm
             .CLI()

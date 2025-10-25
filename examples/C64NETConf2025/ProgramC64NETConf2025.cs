@@ -22,8 +22,13 @@ public class C64NETConf2025 : C64AppAsmProgram
     
     protected override Mos6502Label Build(C64AppBuildContext context, C64Assembler asm)
     {
+        var part = DemoPart.Case3_Full;
+
+        // Force the screen buffer at $1000 as it is by default the Character ROM area by default
+        // When the music is included, it will be located at $1000
+        Mos6502Label screenBuffer = part != DemoPart.Case3_Full ? new Mos6502Label(nameof(screenBuffer), 0x1000) : new Mos6502Label(nameof(screenBuffer));
+        
         asm
-            .LabelForward(out var screenBuffer)
             .LabelForward(out var screenBufferOffset)
             .LabelForward(out var musicBuffer)
             .LabelForward(out var spriteSinXTable)
@@ -33,7 +38,9 @@ public class C64NETConf2025 : C64AppAsmProgram
             .LabelForward(out var spriteXMsbCarryTable)
             .LabelForward(out var irqScene1)
             .LabelForward(out var irqScene2)
-            .LabelForward(out var irqScene3);
+            .LabelForward(out var irqScene3)
+            .LabelForward(out var animateSpriteFunc)
+            .LabelForward(out var spriteBuffer);
 
         const byte charPerIrqStartDefault = 1;
         const byte charPerIrqRunningDefault = 2;
@@ -42,18 +49,23 @@ public class C64NETConf2025 : C64AppAsmProgram
         const byte bottomScreenLineDefault = 0xF8;
 
         var sidRawData = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Sanxion.sid"));
-        var sidFile = context.GetService<IC64SidService>().LoadAndConvertSidFile(context, sidRawData, new SidRelocationConfig()
-        {
-            TargetAddress = 0x1000,
-            ZpLow = 0xF0,
-            ZpHigh = 0xFF,
-        });
+        SidFile? sidFile = null;
+        SidPlayer? sidPlayer = null;
 
-        var sidPlayer = new SidPlayer(sidFile, asm);
+        if (part == DemoPart.Case3_Full)
+        {
+            sidFile = context.GetService<IC64SidService>().LoadAndConvertSidFile(context, sidRawData, new SidRelocationConfig()
+            {
+                TargetAddress = 0x1000,
+                ZpLow = 0xF0,
+                ZpHigh = 0xFF,
+            });
+
+            sidPlayer = new SidPlayer(sidFile, asm);
+        }
 
         asm.ZpAlloc(out var zpCharPerFrame)
             .ZpAlloc(out var zpBaseSinIndex)
-            .ZpAlloc(out var zpSinIndex)
             .ZpAlloc(out var zpIrqLine)
             .ZpAlloc(out var zpStartingIrqLine)
             .ZpAlloc(out var zpSpriteSinIndex)
@@ -74,57 +86,53 @@ public class C64NETConf2025 : C64AppAsmProgram
         // -------------------------------------------------------------------------
         asm.Label(out var startOfCode);
 
-        BeginAsmInit(asm)
-            .SetupRasterIrq(irqScene1, 0xF8)
+        BeginAsmInit(asm);
 
-            .LDA_Imm(charPerIrqStartDefault)
-            .STA(zpCharPerFrame)
+        if (part == DemoPart.Case0_ClearScreen)
+        {
+            asm.ClearMemoryBy256BytesBlock(SCREEN_CHARACTER_ADDRESS_DEFAULT, 4, 0); // use 32 for spaces
+            EndAsmInitAndInfiniteLoop(asm);
+            return startOfCode;
+        }
 
-            .LDA_Imm(bottomScreenLineDefault)
-            .STA(zpStartingIrqLine)
-            .STA(zpIrqLine) // First IRQ line
-            .STA(zpSpriteSinIndex)
-            .STA(zpSinIndex)
-            .STA(zpBaseSinIndex)
-            .STA(screenBufferOffset)
-            .STA(screenBufferOffset + 1);
+        if (part == DemoPart.Case1_Logo)
+        {
+            asm.CopyMemoryBy256BytesBlock(screenBuffer, SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
+            EndAsmInitAndInfiniteLoop(asm);
+            asm.ArrangeBlocks([new(screenBuffer, ScreenBuffer.ToArray(), 256)]);
+            return startOfCode;
+        }
 
-        // Initialize SID music
-        sidPlayer.Initialize();
-
-        asm.LabelForward(out var spriteBuffer);
-        // Copy Sprite to 0xE000
-
+        // Sprite
         using var sprite = new C64Sprite();
-
         sprite.UseStroke(2.0f).Canvas.DrawOval(new SKRect(1, 1, 23, 20), sprite.Brush);
         sprite.Canvas.Flush();
         var spriteData = sprite.ToBits();
-        asm.CopyMemory(spriteBuffer, new Mos6502Label("spriteBufferDest", 0x2000), (ushort)spriteData.Length);
+
+        if (part == DemoPart.Case2_LogoAndSprites)
+        {
+            asm.CopyMemoryBy256BytesBlock(screenBuffer, SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
+        }
 
         // Sprite Address
-        asm.LDA_Imm((byte)(0x2000 / 64))
-            .STA(SPRITE0_ADDRESS_DEFAULT + 0)
-            .STA(SPRITE0_ADDRESS_DEFAULT + 1)
-            .STA(SPRITE0_ADDRESS_DEFAULT + 2)
-            .STA(SPRITE0_ADDRESS_DEFAULT + 3)
-            .STA(SPRITE0_ADDRESS_DEFAULT + 4)
-            .STA(SPRITE0_ADDRESS_DEFAULT + 5)
-            .STA(SPRITE0_ADDRESS_DEFAULT + 6)
-            .STA(SPRITE0_ADDRESS_DEFAULT + 7)
+        var spriteAddr64 = (spriteBuffer / 64).LowByte();
+        asm.LDA_Imm(spriteAddr64);
+        for (int i = 0; i < 8; i++)
+            asm.STA((ushort)(SPRITE0_ADDRESS_DEFAULT + i));
 
-            //.LDX_Imm(startVisibleScreenX)
-            //.LDY_Imm(startVisibleScreenY)
-            .LDX_Imm(0) // Hide sprites at the beginning
-            .LDY_Imm(0)
-            .STX(VIC2_SPRITE0_X).STY(VIC2_SPRITE0_Y)
-            .STX(VIC2_SPRITE1_X).STY(VIC2_SPRITE1_Y)
-            .STX(VIC2_SPRITE2_X).STY(VIC2_SPRITE2_Y)
-            .STX(VIC2_SPRITE3_X).STY(VIC2_SPRITE3_Y)
-            .STX(VIC2_SPRITE4_X).STY(VIC2_SPRITE4_Y)
-            .STX(VIC2_SPRITE5_X).STY(VIC2_SPRITE5_Y)
-            .STX(VIC2_SPRITE6_X).STY(VIC2_SPRITE6_Y)
-            .STX(VIC2_SPRITE7_X).STY(VIC2_SPRITE7_Y);
+        asm.OnResolveEnd(() =>
+        {
+            //context.Info($"Sprite Addr {spriteAddr64.Evaluate()} <- ${spriteBuffer.Address:x4}");
+
+            if ((spriteBuffer.Address / 64) > 0xFF)
+            {
+                throw new InvalidOperationException($"Invalid Sprite buffer address ${spriteBuffer.Address:x4} must be below <= ${0xFF * 64:x4}");
+            }
+            if ((spriteBuffer.Address % 64) != 0)
+            {
+                throw new InvalidOperationException($"Invalid Sprite buffer address ${spriteBuffer.Address:x4} must be aligned on 64 bytes.");
+            }
+        });
 
         // Setup sprite colors
         for (int i = 0; i < 8; i++)
@@ -141,214 +149,256 @@ public class C64NETConf2025 : C64AppAsmProgram
 
         asm.LDA_Imm(0xFF)
             .STA(VIC2_SPRITE_ENABLE);
-        
-        // Enter infinite loop
-        EndAsmInit(asm);
 
-        // -------------------------------------------------------------------------
-        //
-        // IRQ Scene 1 - Fill screen with .NET Conf
-        //
-        // -------------------------------------------------------------------------
-        asm
-            .Label(irqScene1)
-            .PushAllRegisters()
+        asm.LDA_Imm(bottomScreenLineDefault)
+            .STA(zpSpriteSinIndex);
+            
+        if (part == DemoPart.Case2_LogoAndSprites)
+        {
+            asm.LabelForward(out var irqSpriteScene)
+                .SetupRasterIrq(irqSpriteScene, 0xF8);
 
-            .LDA(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt
-            .STA(VIC2_INTERRUPT); // Clear the interrupt flag
+            EndAsmInitAndInfiniteLoop(asm);
 
-        sidPlayer.PlayMusic();
+            asm.Label(irqSpriteScene)
+                .PushAllRegisters()
 
-        asm.LabelForward(out var fillScreen);
+                .LDA(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt
+                .STA(VIC2_INTERRUPT) // Clear the interrupt flag
 
-        sidPlayer.BranchIfNotAtPlaybackPosition(11.75, fillScreen);
+                .JSR(animateSpriteFunc)
 
-        asm.LDX_Imm(0)
-            .LDA_Imm(COLOR_BLUE);
+                .LDA(0xf8)
+                .STA(VIC2_RASTER) // interrupt on line 248 next frame
 
-        asm.Label(out var fill_loop)
-            .STA(0xd800, X)
-            .STA(0xd900, X)
-            .STA(0xda00, X)
-            .STA(0xdb00, X)
-            .INX()
-            .BNE(fill_loop)
+                .PopAllRegisters()
+                .RTI();
+        }
+        else if (part == DemoPart.Case3_Full)
+        {
+            asm.SetupRasterIrq(irqScene1, 0xF8)
 
-            .LDA_Imm(COLOR_BLUE)
-            .STA(VIC2_BORDER_COLOR)
-            .LDA_Imm(COLOR_LIGHT_BLUE)
-            .STA(VIC2_BG_COLOR0)
+                .LDA_Imm(charPerIrqStartDefault)
+                .STA(zpCharPerFrame)
+                
+                .LDA_Imm(bottomScreenLineDefault)
+                .STA(zpStartingIrqLine)
+                .STA(zpIrqLine) // First IRQ line
+                .STA(screenBufferOffset)
+                .STA(zpBaseSinIndex)
+                .STA(screenBufferOffset + 1);
 
-            .LDA_Imm(irqScene2.LowByte())
-            .STA(IRQ_VECTOR)
-            .LDA_Imm(irqScene2.HighByte())
-            .STA(IRQ_VECTOR + 1)
-            .PopAllRegisters()
-            .RTI();
+            // Initialize SID music
+            sidPlayer!.Initialize();
+            
+            // Enter infinite loop
+            EndAsmInitAndInfiniteLoop(asm);
 
-        asm.LabelForward(out var continueFillScreen);
+            // -------------------------------------------------------------------------
+            //
+            // IRQ Scene 1 - Fill screen with .NET Conf
+            //
+            // -------------------------------------------------------------------------
+            asm
+                .Label(irqScene1)
+                .PushAllRegisters()
 
-        //.DEC(0xF0)
-        //.BNE(out var continueIrq)
-        //.LDA_Imm(waitFrame)
-        //.STA(0xF0)
+                .LDA(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt
+                .STA(VIC2_INTERRUPT); // Clear the interrupt flag
 
-        asm.LabelForward(out var mod_buffer_address)
-            .LabelForward(out var mod_screen_address)
-            .Label(fillScreen)
+            sidPlayer.PlayMusic();
 
-            // Modify mod_screen_address
-            .CLC()
-            .LDA(screenBufferOffset)
-            .STA(mod_screen_address + 1)
+            asm.LabelForward(out var fillScreen);
 
-            .LDA_Imm(0x04) // $0400
-            .ADC(screenBufferOffset + 1)
-            .STA(mod_screen_address + 2)
+            sidPlayer.BranchIfNotAtPlaybackPosition(11.75, fillScreen);
 
-            // Modify mod_buffer_address
-            .CLC()
-            .LDA(screenBufferOffset)
-            .ADC_Imm(screenBuffer.LowByte())
-            .STA(mod_buffer_address + 1)
+            asm.LDX_Imm(0)
+                .LDA_Imm(COLOR_BLUE);
 
-            .LDA(screenBufferOffset + 1)
-            .ADC_Imm(screenBuffer.HighByte())
-            .STA(mod_buffer_address + 2);
+            asm.Label(out var fill_loop)
+                .STA(0xd800, X)
+                .STA(0xd900, X)
+                .STA(0xda00, X)
+                .STA(0xdb00, X)
+                .INX()
+                .BNE(fill_loop)
 
-        // Load character from screen buffer
-        asm.Label(mod_buffer_address)
-            .LDA(screenBufferOffset)
-            .EOR_Imm(0x80);
+                .LDA_Imm(COLOR_BLUE)
+                .STA(VIC2_BORDER_COLOR)
+                .LDA_Imm(COLOR_LIGHT_BLUE)
+                .STA(VIC2_BG_COLOR0)
 
-        // Store it to screen memory
-        asm.Label(mod_screen_address)
-            .STA(0x0400)
+                .LDA_Imm(irqScene2.LowByte())
+                .STA(IRQ_VECTOR)
+                .LDA_Imm(irqScene2.HighByte())
+                .STA(IRQ_VECTOR + 1)
+                .PopAllRegisters()
+                .RTI();
 
-            .INC(screenBufferOffset)
-            .BNE(out var skipHigh)
-            .INC(screenBufferOffset + 1);
+            asm.LabelForward(out var continueFillScreen);
 
-        asm.Label(skipHigh)
-            .LDA(screenBufferOffset)
-            .CMP_Imm(0xe8)
-            .LDA(screenBufferOffset + 1)
-            .SBC_Imm(0x03)
-            .BCC(continueFillScreen)
+            //.DEC(0xF0)
+            //.BNE(out var continueIrq)
+            //.LDA_Imm(waitFrame)
+            //.STA(0xF0)
 
-            .LDA_Imm(0)
-            .STA(screenBufferOffset)
-            .STA(screenBufferOffset + 1);
+            asm.LabelForward(out var mod_buffer_address)
+                .LabelForward(out var mod_screen_address)
+                .Label(fillScreen)
 
-        asm.Label(continueFillScreen)
-            .DEC(zpCharPerFrame)
-            .BNE(fillScreen)
+                // Modify mod_screen_address
+                .CLC()
+                .LDA(screenBufferOffset)
+                .STA(mod_screen_address + 1)
 
-            .LDA_Imm(charPerIrqRunningDefault)
-            .STA(zpCharPerFrame)
+                .LDA_Imm(0x04) // $0400
+                .ADC(screenBufferOffset + 1)
+                .STA(mod_screen_address + 2)
 
-            .PopAllRegisters()
-            .RTI();
+                // Modify mod_buffer_address
+                .CLC()
+                .LDA(screenBufferOffset)
+                .ADC_Imm(screenBuffer.LowByte())
+                .STA(mod_buffer_address + 1)
 
-        asm.Label(screenBufferOffset)
-            .Append((ushort)0); // Start of screen memory
+                .LDA(screenBufferOffset + 1)
+                .ADC_Imm(screenBuffer.HighByte())
+                .STA(mod_buffer_address + 2);
 
-        // -------------------------------------------------------------------------
-        //
-        // IRQ Scene 2 - Animate Sprites
-        //
-        // -------------------------------------------------------------------------
-        asm
-            .Label(irqScene2)
-            .PushAllRegisters()
+            // Load character from screen buffer
+            asm.Label(mod_buffer_address)
+                .LDA(screenBufferOffset)
+                .EOR_Imm(0x80);
 
-            .LDA(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt
-            .STA(VIC2_INTERRUPT); // Clear the interrupt flag
+            // Store it to screen memory
+            asm.Label(mod_screen_address)
+                .STA(SCREEN_CHARACTER_ADDRESS_DEFAULT)
 
-        sidPlayer.PlayMusic();
+                .INC(screenBufferOffset)
+                .BNE(out var skipHigh)
+                .INC(screenBufferOffset + 1);
 
-        asm.LabelForward(out var continueAnimateSprite);
+            asm.Label(skipHigh)
+                .LDA(screenBufferOffset)
+                .CMP_Imm(0xe8)
+                .LDA(screenBufferOffset + 1)
+                .SBC_Imm(0x03)
+                .BCC(continueFillScreen)
 
-        sidPlayer.BranchIfNotAtPlaybackPosition(19.5, continueAnimateSprite);
+                .LDA_Imm(0)
+                .STA(screenBufferOffset)
+                .STA(screenBufferOffset + 1);
 
-        asm.LDA_Imm(irqScene3.LowByte())
-            .STA(IRQ_VECTOR)
-            .LDA_Imm(irqScene3.HighByte())
-            .STA(IRQ_VECTOR + 1)
+            asm.Label(continueFillScreen)
+                .DEC(zpCharPerFrame)
+                .BNE(fillScreen)
 
-            .PopAllRegisters();
+                .LDA_Imm(charPerIrqRunningDefault)
+                .STA(zpCharPerFrame)
 
-        // Set values for Scene 3
-        asm.LDA_Imm(0) // A: scroll value
-            .LDX(zpIrqLine)    // X: irqLine
-            .STX(VIC2_RASTER) // interrupt on startingLine
-            .LDY(zpBaseSinIndex)  // Y: sinIndex
+                .PopAllRegisters()
+                .RTI();
 
-            .RTI();
+            asm.Label(screenBufferOffset)
+                .Append((ushort)0); // Start of screen memory
 
-        asm.Label(continueAnimateSprite)
+            // -------------------------------------------------------------------------
+            //
+            // IRQ Scene 2 - Animate Sprites
+            //
+            // -------------------------------------------------------------------------
+            asm
+                .Label(irqScene2)
+                .PushAllRegisters()
 
-            .JSR(out var animateSpriteFunc)
+                .LDA(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt
+                .STA(VIC2_INTERRUPT); // Clear the interrupt flag
 
-            .PopAllRegisters()
-            .RTI();
+            sidPlayer.PlayMusic();
 
-        // -------------------------------------------------------------------------
-        //
-        // IRQ Scene 3 - Wave Logo + Animate Sprite
-        //
-        // -------------------------------------------------------------------------
-        asm.ResetCycle();
-        asm.Label(irqScene3)
-            // X: irqLine
-            // Y: sinIndex
-            // A: scroll value
-            .STA(VIC2_CONTROL2) // scroll
-            .STY(VIC2_BG_COLOR0) // color
-            .INY()
+            asm.LabelForward(out var continueAnimateSprite);
 
-            .INX() // increase by 2 lines to make sure we skip bad lines
-            .INX()
-            .BEQ(out var scene3EndOfFrame)
+            sidPlayer.BranchIfNotAtPlaybackPosition(19.5, continueAnimateSprite);
 
-            .Label(out var returnFromSinIrq)
+            asm.LDA_Imm(irqScene3.LowByte())
+                .STA(IRQ_VECTOR)
+                .LDA_Imm(irqScene3.HighByte())
+                .STA(IRQ_VECTOR + 1)
 
-            .LSR(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt ( ~ equivalent of LDA/STA)
-            .STX(VIC2_RASTER) // interrupt on next line
+                .PopAllRegisters();
 
-            .LDA(sinTable, Y)
+            // Set values for Scene 3
+            asm.LDA_Imm(0) // A: scroll value
+                .LDX(zpIrqLine) // X: irqLine
+                .STX(VIC2_RASTER) // interrupt on startingLine
+                .LDY(zpBaseSinIndex) // Y: sinIndex
 
-            .RTI();
+                .RTI();
 
-        asm.Cycle(out var cycleCount);
-        //Console.WriteLine(cycleCount);
+            asm.Label(continueAnimateSprite)
 
-        asm.Label(scene3EndOfFrame)
-            .PushAllRegisters();
+                .JSR(animateSpriteFunc)
 
-        sidPlayer.PlayMusic();
+                .PopAllRegisters()
+                .RTI();
 
-        asm.JSR(animateSpriteFunc)
+            // -------------------------------------------------------------------------
+            //
+            // IRQ Scene 3 - Wave Logo + Animate Sprite
+            //
+            // -------------------------------------------------------------------------
+            asm.ResetCycle();
+            asm.Label(irqScene3)
+                // X: irqLine
+                // Y: sinIndex
+                // A: scroll value
+                .STA(VIC2_CONTROL2) // scroll
+                .STY(VIC2_BG_COLOR0) // color
+                .INY()
 
-            .PopAllRegisters();
+                .INX() // increase by 2 lines to make sure we skip bad lines
+                .INX()
+                .BEQ(out var scene3EndOfFrame)
 
-        asm
-            .INC(zpBaseSinIndex)
-            .LDY(zpBaseSinIndex)
-            .LDX(zpStartingIrqLine)
-            .CPX_Imm(topScreenLineDefault)
-            .BEQ(returnFromSinIrq)
+                .Label(out var returnFromSinIrq)
 
-            .DEC(zpStartingIrqLine)
-            .DEC(zpStartingIrqLine)
+                .LSR(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt ( ~ equivalent of LDA/STA)
+                .STX(VIC2_RASTER) // interrupt on next line
 
-            // Reset color and scroll
-            .LDA_Imm(VIC2Control2Flags.Columns40)
-            .STA(VIC2_CONTROL2)
-            .LDA_Imm(COLOR_LIGHT_BLUE)
-            .STA(VIC2_BG_COLOR0)
+                .LDA(sinTable, Y)
 
-            .BNE(returnFromSinIrq); // Always
+                .RTI();
+
+            asm.Cycle(out var cycleCount);
+            //Console.WriteLine(cycleCount);
+
+            asm.Label(scene3EndOfFrame)
+                .PushAllRegisters();
+
+            sidPlayer.PlayMusic();
+
+            asm.JSR(animateSpriteFunc)
+
+                .PopAllRegisters();
+
+            asm
+                .INC(zpBaseSinIndex)
+                .LDY(zpBaseSinIndex)
+                .LDX(zpStartingIrqLine)
+                .CPX_Imm(topScreenLineDefault)
+                .BEQ(returnFromSinIrq)
+
+                .DEC(zpStartingIrqLine)
+                .DEC(zpStartingIrqLine)
+
+                // Reset color and scroll
+                .LDA_Imm(VIC2Control2Flags.Columns40)
+                .STA(VIC2_CONTROL2)
+                .LDA_Imm(COLOR_LIGHT_BLUE)
+                .STA(VIC2_BG_COLOR0)
+
+                .BNE(returnFromSinIrq); // Always
+        }
 
         // -------------------------------------------------------------------------
         //
@@ -421,9 +471,12 @@ public class C64NETConf2025 : C64AppAsmProgram
         var musicY = 20;
         //C64CharSet.StringToPETScreenCode($"   HELLO WORLD!").CopyTo(screenBufferData.Slice(40 * 4 + musicX));
         C64CharSet.StringToPETScreenCode($"    CODE: XOOFX").CopyTo(screenBufferData.Slice(40 * musicY + musicX));
-        C64CharSet.StringToPETScreenCode($"   MUSIC: {sidFile.Author.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 2) + musicX));
-        C64CharSet.StringToPETScreenCode($"   TITLE: {sidFile.Name.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 3) + musicX));
-        C64CharSet.StringToPETScreenCode($"RELEASED: {sidFile.Released.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 4) + musicX));
+        if (part == DemoPart.Case3_Full)
+        {
+            C64CharSet.StringToPETScreenCode($"   MUSIC: {sidFile.Author.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 2) + musicX));
+            C64CharSet.StringToPETScreenCode($"   TITLE: {sidFile.Name.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 3) + musicX));
+            C64CharSet.StringToPETScreenCode($"RELEASED: {sidFile.Released.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 4) + musicX));
+        }
 
         const int radius = (screenBitmapHeight - sizeSpriteY) / 2;
         var oscillateRadius = (screenBitmapWidth - sizeSpriteX) / 2 - radius;
@@ -432,10 +485,11 @@ public class C64NETConf2025 : C64AppAsmProgram
         var centerY = startVisibleScreenY + radius;
 
         // Arrange blocks to fit with the constraints
-        asm.ArrangeBlocks(
+        var blocks = new List<AsmBlock>();
+        blocks.AddRange([
             new(screenBuffer, screenBufferArray, 256),
             new(sinTable, Enumerable.Range(0, 256).Select(x => (byte)(0xC8 | (byte)Math.Round(3.5 * Math.Sin(Math.PI * 6 * x / 256) + 3.5))).ToArray(), 256),
-            new(spriteBuffer, spriteData.ToArray()),
+            new(spriteBuffer, spriteData.ToArray(), 64), // Sprites must be aligned to 64 bytes
             new(spriteSinXTable, Enumerable.Range(0, 256).Select(x => (byte)Math.Round(radius * Math.Sin(Math.PI * 2 * x / 256) + centerX)).ToArray(), 256),
             new(spriteSinYTable, Enumerable.Range(0, 256).Select(x => (byte)Math.Round(radius * Math.Sin(Math.PI * 2 * x / 256) + centerY)).ToArray(), 256),
             new(spriteSinCenterTable, Enumerable.Range(0, 256).Select(x => (byte)Math.Round(oscillateRadius * Math.Sin(Math.PI * 2 * x / 256) + oscillateRadius)).ToArray(), 256),
@@ -449,8 +503,14 @@ public class C64NETConf2025 : C64AppAsmProgram
                 0x40, 0x00, // 6 * 2
                 0x80, 0x00, // 7 * 2
             ]),
-            sidPlayer.GetMusicBlock() // This is the only block constrained to be at specific address $1000
-        );
+        ]);
+
+        if (part == DemoPart.Case3_Full)
+        {
+            blocks.Add(sidPlayer!.GetMusicBlock()); // This is the only block constrained to be at specific address $1000
+        }
+        
+        asm.ArrangeBlocks(blocks.ToArray());
 
         return startOfCode;
     }
@@ -488,4 +548,27 @@ public class C64NETConf2025 : C64AppAsmProgram
         0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20  // [24]
     };
     // @formatter:on
+
+    /// <summary>
+    /// Specifies the available demonstration parts for the application.
+    /// </summary>
+    private enum DemoPart
+    {
+        /// <summary>
+        /// Simple clear screen for demonstration
+        /// </summary>
+        Case0_ClearScreen,
+        /// <summary>
+        /// Logo displayed in one go.
+        /// </summary>
+        Case1_Logo,
+        /// <summary>
+        /// Circle animation
+        /// </summary>
+        Case2_LogoAndSprites,
+        /// <summary>
+        /// Full demo with logo displayed progressively, music, sprites, and wave effect.
+        /// </summary>
+        Case3_Full,
+    }
 }
