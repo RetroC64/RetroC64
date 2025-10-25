@@ -8,8 +8,17 @@ using RetroC64.Vice.Monitor.Commands;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Base class for apps that boot directly to a custom6502 program.
+/// It builds a small BASIC stub (SYS) that jumps to the assembled code.
+/// </summary>
 public abstract class C64AppProgram : C64AppElement
 {
+    /// <summary>
+    /// Builds the app: compiles a BASIC SYS stub, assembles the program, and emits a PRG.
+    /// Also wires a live reload action for VICE.
+    /// </summary>
+    /// <param name="context">Build context.</param>
     protected override void Build(C64AppBuildContext context)
     {
         using var basicCompiler = new C64BasicCompiler();
@@ -49,8 +58,18 @@ public abstract class C64AppProgram : C64AppElement
         };
     }
     
+    /// <summary>
+    /// Implement program construction using the provided C64 assembler.
+    /// </summary>
+    /// <param name="context">Build context.</param>
+    /// <param name="asm">Assembler positioned at the desired entry point.</param>
     protected abstract void Build(C64AppBuildContext context, C64Assembler asm);
 
+    /// <summary>
+    /// Emits common initialization: disable interrupts/NMI, set RAM access, and init stack.
+    /// </summary>
+    /// <param name="asm">Assembler.</param>
+    /// <returns>The same assembler to allow fluent usage.</returns>
     protected C64Assembler BeginAsmInit(C64Assembler asm)
     {
         asm.SEI()
@@ -63,6 +82,11 @@ public abstract class C64AppProgram : C64AppElement
         return asm;
     }
 
+    /// <summary>
+    /// Finalizes init by enabling IRQs and entering an infinite loop.
+    /// </summary>
+    /// <param name="asm">Assembler.</param>
+    /// <returns>The same assembler.</returns>
     protected C64Assembler EndAsmInit(C64Assembler asm)
     {
         return asm

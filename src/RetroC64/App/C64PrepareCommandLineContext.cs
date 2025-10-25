@@ -4,6 +4,9 @@
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Context provided to app elements so they can configure the command line (add commands/options).
+/// </summary>
 public class C64PrepareCommandLineContext : C64AppContext
 {
     internal C64PrepareCommandLineContext(C64AppBuilder builder) : base(builder)
@@ -11,5 +14,8 @@ public class C64PrepareCommandLineContext : C64AppContext
         CommandLine = builder.CommandLine;
     }
 
+    /// <summary>
+    /// Gets the command-line host used by the app builder.
+    /// </summary>
     public C64CommandLine CommandLine { get; }
 }

@@ -7,12 +7,21 @@ using Spectre.Console;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// App element that gathers generated PRG files into a D64 disk image.
+/// </summary>
 public class C64AppDisk : C64AppElement, IC64FileContainer
 {
     private readonly Disk64 _disk = new();
 
+    /// <summary>
+    /// Gets the underlying D64 disk instance.
+    /// </summary>
     protected Disk64 Disk => _disk;
 
+    /// <summary>
+    /// Formats the disk, routes child outputs to this disk and finally emits the <c>.d64</c> file.
+    /// </summary>
     protected override void Build(C64AppBuildContext context)
     {
         _disk.Format(Name.ToUpperInvariant());
@@ -29,6 +38,7 @@ public class C64AppDisk : C64AppElement, IC64FileContainer
         context.AddFile(context, $"{Name}.d64", _disk.UnsafeRawImage);
     }
     
+    /// <inheritdoc />
     void IC64FileContainer.AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data)
     {
         filename = filename.ToUpperInvariant();

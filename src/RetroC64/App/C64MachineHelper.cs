@@ -8,8 +8,16 @@ using RetroC64.Vice.Monitor.Responses;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Internal helpers to prepare a clean C64 state in VICE (text screen, color RAM, VIC and SID registers).
+/// </summary>
 internal static class C64MachineHelper
 {
+    /// <summary>
+    /// Performs a soft reset of key RAM regions and device registers via the VICE monitor.
+    /// </summary>
+    /// <param name="context">Current app context (used for logging).</param>
+    /// <param name="monitor">Connected VICE monitor.</param>
     public static async Task SoftReset(C64AppContext context, ViceMonitor monitor)
     {
         var banks = (BanksAvailableResponse)await monitor.SendCommandAsync(new BanksAvailableCommand());

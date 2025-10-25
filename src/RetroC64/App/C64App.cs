@@ -4,7 +4,14 @@
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Base class for high-level apps. Override <see cref="Initialize(C64AppInitializeContext)"/> to configure the app graph.
+/// </summary>
 public abstract class C64App : C64AppElement
 {
+    /// <summary>
+    /// Initializes the app (called once before building or running).
+    /// </summary>
+    /// <param name="context">Initialization context.</param>
     protected abstract override void Initialize(C64AppInitializeContext context);
 }

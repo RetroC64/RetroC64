@@ -6,12 +6,22 @@ using RetroC64.Basic;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// App element that emits a tokenized C64 BASIC program from the provided <see cref="Text"/>.
+/// </summary>
 public class C64AppBasic : C64AppElement
 {
     private readonly C64BasicCompiler _basicCompiler = new();
 
+    /// <summary>
+    /// Gets or sets the BASIC source to compile to PRG.
+    /// </summary>
     public string Text { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Compiles BASIC to PRG and emits the file through the current container.
+    /// </summary>
+    /// <param name="context">Build context.</param>
     protected override void Build(C64AppBuildContext context)
     {
         var basicBytes = _basicCompiler.Compile(Text);

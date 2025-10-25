@@ -11,27 +11,35 @@ using RetroC64.Vice.Monitor.Commands;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Text;
-using static RetroC64.App.C64AppBuilder;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Orchestrates building and running a RetroC64 app from C#.
+/// Provides a CLI host, integrates with the VICE monitor, and supports live sync/hot reload.
+/// </summary>
 public class C64AppBuilder : IC64FileContainer
 {
     private bool _commandLinePrepared;
     private readonly ILoggerFactory _loggerFactory;
     private readonly List<string> _buildGeneratedFilesForVice = new();
-    private ManualResetEventSlim _hotReloadEvent = new(false);
+    private readonly ManualResetEventSlim _hotReloadEvent = new(false);
     private CodeReloadEvent? _codeReloadEvent;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private bool _isAppInitialized;
     private bool _isViceRunning;
-    private bool _isLiveFileAutostarted = false;
+    private bool _isLiveFileAutoStarted = false;
     private ServiceProvider? _serviceProvider;
     
     private Func<ViceMonitor, Task>? _customCodeReloadAction;
 
     internal static readonly bool IsDotNetWatch = "1".Equals(Environment.GetEnvironmentVariable("DOTNET_WATCH"), StringComparison.Ordinal);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="C64AppBuilder"/> class.
+    /// </summary>
+    /// <param name="rootElement">Root element of the app graph.</param>
+    /// <param name="settings">Optional global settings.</param>
     public C64AppBuilder(C64AppElement rootElement, C64AppBuilderSettings? settings = null)
     {
         _cancellationTokenSource = new CancellationTokenSource();
@@ -77,16 +85,36 @@ public class C64AppBuilder : IC64FileContainer
         Log = _loggerFactory.CreateLogger($"[gray]RetroC64[/]-{rootElement.Name}");
     }
 
+    /// <summary>
+    /// Gets the global settings used by the builder.
+    /// </summary>
     public C64AppBuilderSettings Settings { get; }
     
+    /// <summary>
+    /// Gets the command-line host exposing build and live commands.
+    /// </summary>
     public C64CommandLine CommandLine { get; } 
 
+    /// <summary>
+    /// Gets the root app element being built/run.
+    /// </summary>
     public C64AppElement RootElement { get; }
 
-    public ILogger Log { get; set; }
+    /// <summary>
+    /// Gets the logger instance used by the builder.
+    /// </summary>
+    public ILogger Log { get; }
 
-    public IC64FileService FileService { get; set; } = new C64LocalFileService();
+    /// <summary>
+    /// Gets the file service used to persist generated artifacts (e.g., PRG/D64) to disk.
+    /// </summary>
+    public IC64FileService FileService => Settings.FileService;
     
+    /// <summary>
+    /// Runs the command-line host with the provided arguments.
+    /// </summary>
+    /// <param name="args">Process arguments.</param>
+    /// <returns>Exit code.</returns>
     public async Task<int> Run(string[] args)
     {
         if (!_commandLinePrepared)
@@ -98,44 +126,10 @@ public class C64AppBuilder : IC64FileContainer
 
         return await CommandLine.RunAsync(args);
     }
-
-    private bool TryInitializeAppElements()
-    {
-        if (_isAppInitialized) return true;
-
-        Log.LogInformationMarkup("⚙️ Initializing...");
-        try
-        {
-            var initContext = new C64AppInitializeContext(this);
-            RootElement.InternalInitialize(initContext);
-            _isAppInitialized = true;
-        }
-        catch (Exception ex)
-        {
-            Log.LogErrorMarkup($"🔥 [red]Initialization failed:[/] {Markup.Escape(ex.Message)}");
-            return false;
-        }
-
-        return true;
-    }
-
-    internal ServiceProvider GetOrCreateServiceProvider()
-    {
-        if (_serviceProvider is null)
-        {
-            ServiceCollection services = new();
-
-            services.AddSingleton<IC64SidService>(new C64SidService());
-            services.AddSingleton<ILoggerFactory>(_loggerFactory);
-
-            // TODO: Allow to plug services from AppElements and settings
-
-            _serviceProvider = services.BuildServiceProvider();
-        }
-
-        return _serviceProvider;
-    }
     
+    /// <summary>
+    /// Builds the current app graph and emits files to the active container.
+    /// </summary>
     public async Task BuildAsync()
     {
         _buildGeneratedFilesForVice.Clear();
@@ -165,9 +159,12 @@ public class C64AppBuilder : IC64FileContainer
     }
     
 
+    /// <summary>
+    /// Starts the VICE emulator and enters a loop that builds, autostarts the program, and live-syncs code changes.
+    /// </summary>
     public async Task LiveAsync()
     {
-        _isLiveFileAutostarted = false;
+        _isLiveFileAutoStarted = false;
 
         // We start to initialize the app elements (to allow to configure global settings like vice monitor)
         TryInitializeAppElements();
@@ -241,7 +238,7 @@ public class C64AppBuilder : IC64FileContainer
 
                             monitor.Connect();
 
-                            _isLiveFileAutostarted = false;
+                            _isLiveFileAutoStarted = false;
                             _isViceRunning = runner.IsRunning;
                         }
                         catch (OperationCanceledException)
@@ -259,7 +256,7 @@ public class C64AppBuilder : IC64FileContainer
 
                     if (_buildGeneratedFilesForVice.Count > 0)
                     {
-                        if (!_isLiveFileAutostarted || _customCodeReloadAction is null)
+                        if (!_isLiveFileAutoStarted || _customCodeReloadAction is null)
                         {
                             var fileToLaunch = _buildGeneratedFilesForVice[0];
                             monitor.SendCommand(new AutostartCommand()
@@ -268,7 +265,7 @@ public class C64AppBuilder : IC64FileContainer
                                 RunAfterLoading = true
                             });
 
-                            _isLiveFileAutostarted = true;
+                            _isLiveFileAutoStarted = true;
                         }
                         else
                         {
@@ -286,16 +283,6 @@ public class C64AppBuilder : IC64FileContainer
                 {
                     Log.LogError($"⛔ An unexpected error occured. {ex.Message}");
                 }
-
-                //var result = await monitor.SendCommandAsync(new RegistersAvailableCommand());
-                //Console.WriteLine(result);
-
-                // ResponseType: RegistersAvailable, Error: None, RequestId: 0x00000001, Registers: [RegisterName { RegisterId = 3, SizeInBits = 16, Name = PC }, RegisterName { RegisterId = 0, SizeInBits = 8, Name = A }, RegisterName { RegisterId = 1, SizeInBits = 8, Name = X }, RegisterName { RegisterId = 2, SizeInBits = 8, Name = Y }, RegisterName { RegisterId = 4, SizeInBits = 8, Name = SP }, RegisterName { RegisterId = 55, SizeInBits = 8, Name = 00 }, RegisterName { RegisterId = 56, SizeInBits = 8, Name = 01 }, RegisterName { RegisterId = 5, SizeInBits = 8, Name = FL }, RegisterName { RegisterId = 53, SizeInBits = 16, Name = LIN }, RegisterName { RegisterId = 54, SizeInBits = 16, Name = CYC }]
-
-                //monitor.SendCommand(new RegistersSetCommand() { Items = [new RegisterValue(new RegisterId(3), startOfCode.Address)] });
-                //monitor.SendCommand(new AutostartCommand() { Filename = Path.Combine(AppContext.BaseDirectory, _buildGeneratedFiles[0]), RunAfterLoading = true });
-                //monitor.SendCommand(new ExitCommand());
-
             }
 
             Log.LogInformationMarkup("🛑 Shutting down RetroC64. See you in [cyan]6502[/] cycles!");
@@ -322,6 +309,43 @@ public class C64AppBuilder : IC64FileContainer
                 // ignore
             }
         }
+    }
+    
+    private bool TryInitializeAppElements()
+    {
+        if (_isAppInitialized) return true;
+
+        Log.LogInformationMarkup("⚙️ Initializing...");
+        try
+        {
+            var initContext = new C64AppInitializeContext(this);
+            RootElement.InternalInitialize(initContext);
+            _isAppInitialized = true;
+        }
+        catch (Exception ex)
+        {
+            Log.LogErrorMarkup($"🔥 [red]Initialization failed:[/] {Markup.Escape(ex.Message)}");
+            return false;
+        }
+
+        return true;
+    }
+
+    internal ServiceProvider GetOrCreateServiceProvider()
+    {
+        if (_serviceProvider is null)
+        {
+            ServiceCollection services = new();
+
+            services.AddSingleton<IC64SidService>(new C64SidService());
+            services.AddSingleton<ILoggerFactory>(_loggerFactory);
+
+            // TODO: Allow to plug services from AppElements and settings
+
+            _serviceProvider = services.BuildServiceProvider();
+        }
+
+        return _serviceProvider;
     }
 
     private void OnConsoleOnCancelKeyPress(object? sender, ConsoleCancelEventArgs args)
@@ -357,8 +381,14 @@ public class C64AppBuilder : IC64FileContainer
         NotifyHotReload(new(LogLevel.Information, "♻️ Code change detected! Reloading into the emulator!"));
     }
 
+    /// <summary>
+    /// Runs a new app element using the builder and the provided settings.
+    /// </summary>
     public static async Task<int> Run<TAppElement>(string[] args, C64AppBuilderSettings? settings = null) where TAppElement : C64AppElement, new() => await Run(new TAppElement(), args, settings);
 
+    /// <summary>
+    /// Runs the specified app element using the builder and the provided settings.
+    /// </summary>
     public static async Task<int> Run(C64AppElement element, string[] args, C64AppBuilderSettings? settings = null)
     {
         var appBuilder = new C64AppBuilder(element, settings);

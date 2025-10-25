@@ -9,10 +9,19 @@ using RetroC64.App;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Internal bridge for .NET Hot Reload. Raises events when code changes are applied so the live session can react.
+/// </summary>
 internal static class C64HotReloadService
 {
+    /// <summary>
+    /// Raised before stateful caches should be cleared due to hot reload.
+    /// </summary>
     public static event Action<Type[]?>? ClearCacheEvent;
 
+    /// <summary>
+    /// Raised after hot reload has updated application types.
+    /// </summary>
     public static event Action<Type[]?>? UpdateApplicationEvent;
 
     internal static void ClearCache(Type[]? types)

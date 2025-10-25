@@ -11,13 +11,17 @@ using Spectre.Console;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Internal implementation of <see cref="IC64SidService"/> with in-memory caching and error handling.
+/// </summary>
 internal class C64SidService : IC64SidService
 {
     private readonly Dictionary<UInt128, SidFile> _cache = new();
 
+    /// <inheritdoc />
     public SidFile LoadAndConvertSidFile(C64AppContext context, byte[] sidFileBytes, SidRelocationConfig relocationConfig)
     {
-        // 6 bytes:
+        // 6 bytes header used to include relocation parameters in the cache key:
         //   ushort LoadAddress
         //   byte   ZpLow
         //   byte   ZpHigh

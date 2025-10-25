@@ -7,6 +7,10 @@ using XenoAtom.CommandLine;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Command-line entry point for building and running a C64 app.
+/// Provides the <c>build</c> and <c>live</c> commands that integrate with the VICE emulator.
+/// </summary>
 public sealed class C64CommandLine : CommandApp
 {
     private readonly C64AppBuilder _builder;
@@ -29,7 +33,7 @@ public sealed class C64CommandLine : CommandApp
         };
         Add(BuildCommand);
 
-        
+
         LiveCommand = new Command("live", "Run this C64 App with Vice Emulator and keep it live synced.")
         {
             async (ctx, arguments) =>
@@ -42,8 +46,14 @@ public sealed class C64CommandLine : CommandApp
         Add(LiveCommand);
     }
 
+    /// <summary>
+    /// Gets the command that builds the current C64 app once and exits.
+    /// </summary>
     public Command BuildCommand { get; }
 
+    /// <summary>
+    /// Gets the command that launches the VICE emulator and live-syncs code changes.
+    /// </summary>
     public Command LiveCommand { get; }
 
     private static string GetSimpleExeName()

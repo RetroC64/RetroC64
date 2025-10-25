@@ -7,20 +7,36 @@ using System.Runtime.InteropServices;
 
 namespace RetroC64.App;
 
+/// <summary>
+/// Base node in the RetroC64 app graph. Supports child elements, initialization and build traversal.
+/// </summary>
 public abstract class C64AppElement : IEnumerable<C64AppElement>
 {
     private readonly List<C64AppElement> _children = new();
     private bool _isBuilding;
 
+    /// <summary>
+    /// Initializes a new instance of the element and defaults <see cref="Name"/> to the type name.
+    /// </summary>
     protected C64AppElement()
     {
         Name = GetType().Name;
     }
 
+    /// <summary>
+    /// Gets or sets the element name, used for generated file names and disk labels. Defaults to the type name.
+    /// </summary>
     public string Name { get; set; }
     
+    /// <summary>
+    /// Gets the child elements.
+    /// </summary>
     public IReadOnlyList<C64AppElement> Children => _children;
 
+    /// <summary>
+    /// Adds a child element to this element.
+    /// </summary>
+    /// <param name="element">Child element to add.</param>
     public void Add(C64AppElement element)
     {
         ArgumentNullException.ThrowIfNull(element);
@@ -43,6 +59,9 @@ public abstract class C64AppElement : IEnumerable<C64AppElement>
         }
     }
 
+    /// <summary>
+    /// Allows an element to extend the command line (override to add options/commands).
+    /// </summary>
     protected virtual void PrepareCommandLine(C64PrepareCommandLineContext commandLineContext)
     {
     }
@@ -75,6 +94,9 @@ public abstract class C64AppElement : IEnumerable<C64AppElement>
         }
     }
 
+    /// <summary>
+    /// Override to configure the element during initialization (add children, set properties, etc.).
+    /// </summary>
     protected virtual void Initialize(C64AppInitializeContext context)
     {
     }
@@ -97,6 +119,9 @@ public abstract class C64AppElement : IEnumerable<C64AppElement>
         }
     }
 
+    /// <summary>
+    /// Override to generate files or construct children during the build phase.
+    /// </summary>
     protected virtual void Build(C64AppBuildContext context)
     {
         var span = CollectionsMarshal.AsSpan(_children);
