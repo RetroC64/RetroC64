@@ -51,7 +51,7 @@ public abstract class C64AppProgram : C64AppElement
     
     protected abstract void Build(C64AppBuildContext context, C64Assembler asm);
 
-    protected static C64Assembler BeginAsmInit(C64Assembler asm)
+    protected C64Assembler BeginAsmInit(C64Assembler asm)
     {
         asm.SEI()
             .SetupTimeOfDayAndGetVerticalFrequency()
@@ -63,7 +63,7 @@ public abstract class C64AppProgram : C64AppElement
         return asm;
     }
 
-    protected static C64Assembler EndAsmInit(C64Assembler asm)
+    protected C64Assembler EndAsmInit(C64Assembler asm)
     {
         return asm
             .CLI()

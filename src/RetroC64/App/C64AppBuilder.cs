@@ -32,9 +32,10 @@ public class C64AppBuilder : IC64FileContainer
 
     internal static readonly bool IsDotNetWatch = "1".Equals(Environment.GetEnvironmentVariable("DOTNET_WATCH"), StringComparison.Ordinal);
 
-    public C64AppBuilder(C64AppElement rootElement)
+    public C64AppBuilder(C64AppElement rootElement, C64AppBuilderSettings? settings = null)
     {
         _cancellationTokenSource = new CancellationTokenSource();
+        Settings = settings ?? new C64AppBuilderSettings();
         CommandLine = new(this);
         RootElement = rootElement;
 
@@ -76,7 +77,7 @@ public class C64AppBuilder : IC64FileContainer
         Log = _loggerFactory.CreateLogger($"[gray]RetroC64[/]-{rootElement.Name}");
     }
 
-    public C64AppBuilderSettings Settings { get; } = new C64AppBuilderSettings();
+    public C64AppBuilderSettings Settings { get; }
     
     public C64CommandLine CommandLine { get; } 
 
@@ -356,15 +357,14 @@ public class C64AppBuilder : IC64FileContainer
         NotifyHotReload(new(LogLevel.Information, "♻️ Code change detected! Reloading into the emulator!"));
     }
 
-    public static async Task<int> Run<TAppElement>(string[] args, C64AppBuilderConfig? config = null) where TAppElement : C64AppElement, new() => await Run(new TAppElement(), args, config);
+    public static async Task<int> Run<TAppElement>(string[] args, C64AppBuilderSettings? settings = null) where TAppElement : C64AppElement, new() => await Run(new TAppElement(), args, settings);
 
-    public static async Task<int> Run(C64AppElement element, string[] args, C64AppBuilderConfig? config = null)
+    public static async Task<int> Run(C64AppElement element, string[] args, C64AppBuilderSettings? settings = null)
     {
-        var appBuilder = new C64AppBuilder(element);
+        var appBuilder = new C64AppBuilder(element, settings);
         return await appBuilder.Run(args);
     }
-
-
+    
     private string GetOrCreateBuildFolder()
     {
         if (!Directory.Exists(Settings.RetroC64BuildFolder))
@@ -374,9 +374,7 @@ public class C64AppBuilder : IC64FileContainer
 
         return Settings.RetroC64BuildFolder;
     }
-
-
-
+    
     void IC64FileContainer.AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data)
     {
         var buildFolder = GetOrCreateBuildFolder();
