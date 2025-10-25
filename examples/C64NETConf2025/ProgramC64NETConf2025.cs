@@ -12,7 +12,7 @@ using static RetroC64.C64Registers;
 
 return await C64AppBuilder.Run<C64NETConf2025>(args);
 
-public class C64NETConf2025 : C64AppProgram
+public class C64NETConf2025 : C64AppAsmProgram
 {
     protected override void Initialize(C64AppInitializeContext context)
     {
@@ -20,7 +20,7 @@ public class C64NETConf2025 : C64AppProgram
         context.Settings.EnableViceMonitorVerboseLogging = false;
     }
     
-    protected override void Build(C64AppBuildContext context, C64Assembler asm)
+    protected override Mos6502Label Build(C64AppBuildContext context, C64Assembler asm)
     {
         asm
             .LabelForward(out var screenBuffer)
@@ -451,6 +451,8 @@ public class C64NETConf2025 : C64AppProgram
             ]),
             sidPlayer.GetMusicBlock() // This is the only block constrained to be at specific address $1000
         );
+
+        return startOfCode;
     }
 
     private const byte NNNN = 0xA0;

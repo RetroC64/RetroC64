@@ -20,7 +20,25 @@ public class C64AppBuildContext : C64AppContext, IC64FileContainer
     /// <summary>
     /// Optional action executed during live reload to patch the running program in VICE.
     /// </summary>
-    public Func<ViceMonitor, Task>? CustomReloadAction { get; set; }
+    public Func<ViceMonitor, Task>? CustomReloadAction { get; private set; }
+
+    /// <summary>
+    /// Sets a custom action to be executed during live reload operations.
+    /// </summary>
+    /// <remarks>This method allows customization of the live reload behavior by specifying an action to
+    /// execute. The action can only be set once; subsequent attempts to set the action will result in an
+    /// exception.</remarks>
+    /// <param name="action">A delegate that represents the asynchronous action to perform when live reload is triggered. The delegate
+    /// receives a <see cref="ViceMonitor"/> instance as a parameter.</param>
+    /// <exception cref="InvalidOperationException">Thrown if a live reload action has already been set.</exception>
+    public void SetLiveReloadAction(Func<ViceMonitor, Task> action)
+    {
+        if (CustomReloadAction is not null)
+        {
+            throw new InvalidOperationException("Live reload action has already been set.");
+        }
+        CustomReloadAction = action;
+    }
 
     /// <summary>
     /// Gets the current file container used to receive generated files.

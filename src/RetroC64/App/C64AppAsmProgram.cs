@@ -2,6 +2,7 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using Asm6502;
 using RetroC64.Basic;
 using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
@@ -12,7 +13,7 @@ namespace RetroC64.App;
 /// Base class for apps that boot directly to a custom6502 program.
 /// It builds a small BASIC stub (SYS) that jumps to the assembled code.
 /// </summary>
-public abstract class C64AppProgram : C64AppElement
+public abstract class C64AppAsmProgram : C64AppElement
 {
     /// <summary>
     /// Builds the app: compiles a BASIC SYS stub, assembles the program, and emits a PRG.
@@ -25,37 +26,53 @@ public abstract class C64AppProgram : C64AppElement
         basicCompiler.Compile("0SYS0000");
 
         var startAsm = (ushort)(basicCompiler.StartAddress + basicCompiler.CurrentOffset);
-        basicCompiler.Reset();
-        var basicBuffer = basicCompiler.Compile($"0SYS{startAsm}");
-
         using var asm = new C64Assembler(startAsm);
-        Build(context, asm);
+        var startLabel = Build(context, asm);
         asm.End();
+
+        if (!startLabel.IsBound)
+        {
+            throw new InvalidOperationException($"The start label `{startLabel}` for the program is not bound");
+        }
+
+        if (startLabel.Address > 9999)
+        {
+            throw new InvalidOperationException($"The start label `{startLabel}` address ${startLabel.Address:x4} exceeds the maximum allowed address (${9999:x4}) for a BASIC SYS call");
+        }
+
+        basicCompiler.Reset();
+        var basicBuffer = basicCompiler.Compile($"0SYS{startLabel.Address:0000}");
 
         byte[] programData = [.. basicBuffer, .. asm.Buffer];
         context.AddFile(context, $"{Name.ToLowerInvariant()}.prg", programData);
 
         var asmBuffer = asm.Buffer.ToArray();
 
-        context.CustomReloadAction = async vice =>
-        {
-            await C64MachineHelper.SoftReset(context, vice);
-            
-            await vice.SendCommandAsync(new MemorySetCommand()
+        // Add support for a live reload action
+        context.SetLiveReloadAction(async vice =>
             {
-                BankId = new(1),
-                Data = asmBuffer,
-                Memspace = MemSpace.MainMemory,
-                StartAddress = startAsm,
-            });
+                await C64MachineHelper.SoftReset(context, vice);
 
-            await vice.SendCommandAsync(new RegistersSetCommand() { Items = [
-                new RegisterValue(RegisterId.FLAGS, 0),
-                new RegisterValue(RegisterId.PC, startAsm)
-            ] });
+                await vice.SendCommandAsync(new MemorySetCommand()
+                {
+                    BankId = new(1),
+                    Data = asmBuffer,
+                    Memspace = MemSpace.MainMemory,
+                    StartAddress = startAsm,
+                });
 
-            await vice.SendCommandAsync(new ExitCommand());
-        };
+                await vice.SendCommandAsync(new RegistersSetCommand()
+                {
+                    Items =
+                    [
+                        new RegisterValue(RegisterId.FLAGS, 0),
+                        new RegisterValue(RegisterId.PC, startAsm)
+                    ]
+                });
+
+                await vice.SendCommandAsync(new ExitCommand());
+            }
+        );
     }
     
     /// <summary>
@@ -63,7 +80,8 @@ public abstract class C64AppProgram : C64AppElement
     /// </summary>
     /// <param name="context">Build context.</param>
     /// <param name="asm">Assembler positioned at the desired entry point.</param>
-    protected abstract void Build(C64AppBuildContext context, C64Assembler asm);
+    /// <returns>The start address</returns>
+    protected abstract Mos6502Label Build(C64AppBuildContext context, C64Assembler asm);
 
     /// <summary>
     /// Emits common initialization: disable interrupts/NMI, set RAM access, and init stack.
