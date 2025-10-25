@@ -10,7 +10,7 @@ return await C64AppBuilder.Run<HelloBasic>(args);
 /// </summary>
 internal class HelloBasic : C64AppBasic
 {
-    protected override void Initialize(C64AppInitializeContext context)
+    public HelloBasic()
     {
         Text = """
                10 X = 1
@@ -18,5 +18,10 @@ internal class HelloBasic : C64AppBasic
                30 REM X = X + 1
                40 REM GOTO 20
                """;
+    }
+
+    protected override void Initialize(C64AppInitializeContext context)
+    {
+        // Can perform additional initialization here if needed
     }
 }

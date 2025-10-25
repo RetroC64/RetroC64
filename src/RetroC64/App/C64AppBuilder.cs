@@ -26,26 +26,27 @@ public class C64AppBuilder : IC64FileContainer
     private readonly ManualResetEventSlim _hotReloadEvent = new(false);
     private CodeReloadEvent? _codeReloadEvent;
     private readonly CancellationTokenSource _cancellationTokenSource;
-    private bool _isAppInitialized;
     private bool _isViceRunning;
     private bool _isLiveFileAutoStarted = false;
     private ServiceProvider? _serviceProvider;
     
     private Func<ViceMonitor, Task>? _customCodeReloadAction;
+    private readonly Func<C64AppElement> _factory;
+    private C64AppElement? _rootElement;
 
     internal static readonly bool IsDotNetWatch = "1".Equals(Environment.GetEnvironmentVariable("DOTNET_WATCH"), StringComparison.Ordinal);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="C64AppBuilder"/> class.
     /// </summary>
-    /// <param name="rootElement">Root element of the app graph.</param>
+    /// <param name="factory">Root element of the app graph.</param>
     /// <param name="settings">Optional global settings.</param>
-    public C64AppBuilder(C64AppElement rootElement, C64AppBuilderSettings? settings = null)
+    public C64AppBuilder(Func<C64AppElement> factory, C64AppBuilderSettings? settings = null)
     {
+        _factory = factory;
         _cancellationTokenSource = new CancellationTokenSource();
         Settings = settings ?? new C64AppBuilderSettings();
         CommandLine = new(this);
-        RootElement = rootElement;
 
         _loggerFactory = LoggerFactory.Create(configure =>
             {
@@ -81,7 +82,7 @@ public class C64AppBuilder : IC64FileContainer
 
         C64HotReloadService.UpdateApplicationEvent += HotReloadServiceOnUpdateApplicationEvent;
 
-
+        var rootElement = factory();
         Log = _loggerFactory.CreateLogger($"[gray]RetroC64[/]-{rootElement.Name}");
     }
 
@@ -94,11 +95,6 @@ public class C64AppBuilder : IC64FileContainer
     /// Gets the command-line host exposing build and live commands.
     /// </summary>
     public C64CommandLine CommandLine { get; } 
-
-    /// <summary>
-    /// Gets the root app element being built/run.
-    /// </summary>
-    public C64AppElement RootElement { get; }
 
     /// <summary>
     /// Gets the logger instance used by the builder.
@@ -120,7 +116,7 @@ public class C64AppBuilder : IC64FileContainer
         if (!_commandLinePrepared)
         {
             var prepareContext = new C64PrepareCommandLineContext(this);
-            RootElement.InternalPrepareCommandLine(prepareContext);
+            _factory().InternalPrepareCommandLine(prepareContext);
             _commandLinePrepared = true;
         }
 
@@ -133,11 +129,13 @@ public class C64AppBuilder : IC64FileContainer
     public async Task BuildAsync()
     {
         _buildGeneratedFilesForVice.Clear();
-
+        
         if (!TryInitializeAppElements())
         {
             return;
         }
+
+        Debug.Assert(_rootElement is not null);
 
         Log.LogInformationMarkup("🛠️ Building...");
         try
@@ -146,7 +144,7 @@ public class C64AppBuilder : IC64FileContainer
             var context = new C64AppBuildContext(this);
             context.PushFileContainer(this);
             _customCodeReloadAction = null;
-            RootElement.InternalBuild(context);
+            _rootElement!.InternalBuild(context);
             Log.LogInformationMarkup($"⏱️ Build in [cyan]{clock.Elapsed.TotalMilliseconds:0.0}[/]ms");
             _customCodeReloadAction = context.CustomReloadAction;
         }
@@ -155,9 +153,9 @@ public class C64AppBuilder : IC64FileContainer
             Log.LogErrorMarkup($"🔥 [red]Build failed:[/] {Markup.Escape(ex.Message)}");
         }
 
-        _isAppInitialized = false; // Next time we force a re-initialization
+        // Next time we force a re-initialization
+        _rootElement = null;
     }
-    
 
     /// <summary>
     /// Starts the VICE emulator and enters a loop that builds, autostarts the program, and live-syncs code changes.
@@ -313,18 +311,21 @@ public class C64AppBuilder : IC64FileContainer
     
     private bool TryInitializeAppElements()
     {
-        if (_isAppInitialized) return true;
+        if (_rootElement is not null) return true;
+
 
         Log.LogInformationMarkup("⚙️ Initializing...");
         try
         {
+            _rootElement = _factory();
+
             var initContext = new C64AppInitializeContext(this);
-            RootElement.InternalInitialize(initContext);
-            _isAppInitialized = true;
+            _rootElement.InternalInitialize(initContext);
         }
         catch (Exception ex)
         {
             Log.LogErrorMarkup($"🔥 [red]Initialization failed:[/] {Markup.Escape(ex.Message)}");
+            _rootElement = null;
             return false;
         }
 
@@ -384,14 +385,14 @@ public class C64AppBuilder : IC64FileContainer
     /// <summary>
     /// Runs a new app element using the builder and the provided settings.
     /// </summary>
-    public static async Task<int> Run<TAppElement>(string[] args, C64AppBuilderSettings? settings = null) where TAppElement : C64AppElement, new() => await Run(new TAppElement(), args, settings);
+    public static async Task<int> Run<TAppElement>(string[] args, C64AppBuilderSettings? settings = null) where TAppElement : C64AppElement, new() => await Run(() => new TAppElement(), args, settings);
 
     /// <summary>
     /// Runs the specified app element using the builder and the provided settings.
     /// </summary>
-    public static async Task<int> Run(C64AppElement element, string[] args, C64AppBuilderSettings? settings = null)
+    public static async Task<int> Run(Func<C64AppElement> factory, string[] args, C64AppBuilderSettings? settings = null)
     {
-        var appBuilder = new C64AppBuilder(element, settings);
+        var appBuilder = new C64AppBuilder(factory, settings);
         return await appBuilder.Run(args);
     }
     
