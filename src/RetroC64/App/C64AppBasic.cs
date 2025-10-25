@@ -16,7 +16,9 @@ public class C64AppBasic : C64AppElement
     /// <summary>
     /// Gets or sets the BASIC source to compile to PRG.
     /// </summary>
-    public string Text { get; set; } = string.Empty;
+    public string Text { get; set; } = """
+                                       10 PRINT "HELLO, WORLD FROM RETRO_C64"
+                                       """;
 
     /// <summary>
     /// Compiles BASIC to PRG and emits the file through the current container.
