@@ -6,9 +6,10 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using RetroC64.Vice.Monitor;
 using System.Net.Sockets;
-using System.Threading;
+using Asm6502;
 using RetroC64.Vice.Monitor.Commands;
 using RetroC64.Vice.Monitor.Responses;
+// ReSharper disable InconsistentNaming
 
 namespace RetroC64.App;
 
@@ -152,7 +153,7 @@ internal class C64DebuggerServer : DebugAdapterBase
         _context.Info($"C64 {nameof(HandleEvaluateRequest)}");
         return new EvaluateResponse()
         {
-            Result = "42",
+            Result = "0",
             VariablesReference = 0
         };
     }
@@ -470,11 +471,11 @@ internal class C64DebuggerServer : DebugAdapterBase
                     Name = "Main",
                     Line = 10,
                     Column = 1,
+                    InstructionPointerReference = $"{_machineState.PC}",
                     Source = new Source()
                     {
                         Name = "ProgramC64NETConf2025",
                         Path = "C:\\code\\c64\\RetroC64\\examples\\C64NETConf2025\\ProgramC64NETConf2025.cs"
-
                     }
                 }
             ]
@@ -532,51 +533,36 @@ internal class C64DebuggerServer : DebugAdapterBase
             case VariableScope.None:
                 break;
             case VariableScope.CpuRegisters:
-                foreach (var registerValue in _machineState.Registers)
+                variables.Add(new Variable("PC (Program Counter)", $"${_machineState.PC:x4} ({_machineState.PC})", 0)
                 {
-                    switch (registerValue.RegisterId)
-                    {
-                        case RegisterId.A:
-                            variables.Add(new Variable("A (Accumulator)", $"${registerValue.Value:x2} ({registerValue.Value})", 0));
-                            break;
-                        case RegisterId.X:
-                            variables.Add(new Variable("X (Register)", $"${registerValue.Value:x2} ({registerValue.Value})", 0));
-                            break;
-                        case RegisterId.Y:
-                            variables.Add(new Variable("Y (Register)", $"${registerValue.Value:x2} ({registerValue.Value})", 0));
-                            break;
-                        case RegisterId.PC:
-                            variables.Add(new Variable("PC (Program Counter)", $"${registerValue.Value:x4} ({registerValue.Value})", 0)
-                            {
-                                MemoryReference = $"{registerValue.Value}"
-                            });
-                            break;
-                        case RegisterId.SP:
-                            variables.Add(new Variable("SP (stack pointer)", $"${registerValue.Value:x2} ({registerValue.Value})", 0));
-                            break;
-                    }
-                }
+                    MemoryReference = $"{_machineState.PC}"
+                });
+                variables.Add(new Variable("A (Accumulator)", $"${_machineState.A:x2} ({_machineState.A})", 0));
+                variables.Add(new Variable("X (Register)", $"${_machineState.X:x2} ({_machineState.X})", 0));
+                variables.Add(new Variable("Y (Register)", $"${_machineState.Y:x2} ({_machineState.Y})", 0));
+                variables.Add(new Variable("SP (stack pointer)", $"${_machineState.SP:x2} ({_machineState.SP})", 0));
                 break;
             case VariableScope.CpuFlags:
             {
-                var flagRegister = _machineState.Registers.FirstOrDefault(x => x.RegisterId == RegisterId.FLAGS);
-                variables.Add(new("SR (status register)", $"${flagRegister.Value:x2} ({flagRegister.Value})", 0));
+                var flags = _machineState.SR;
+                var flagsAsByte = (byte)flags;
+                variables.Add(new("SR (Status Register)", $"${flagsAsByte:x2} ({flagsAsByte})", 0));
                 // Flags: N V - B D I Z C
                 //        + + - - - - + +
-                variables.Add(new("N (bit 7 - negative)", $"{(flagRegister.Value >> 7) & 1}", 0));
-                variables.Add(new("V (bit 6 - overflow)", $"{(flagRegister.Value >> 6) & 1}", 0));
-                variables.Add(new("- (bit 5 - ignored)", $"{(flagRegister.Value >> 5) & 1}", 0));
-                variables.Add(new("B (bit 4 - break)", $"{(flagRegister.Value >> 4) & 1}", 0));
-                variables.Add(new("D (bit 3 - decimal)", $"{(flagRegister.Value >> 3) & 1}", 0));
-                variables.Add(new("I (bit 2 - irq disable)", $"{(flagRegister.Value >> 2) & 1}", 0));
-                variables.Add(new("Z (bit 1 - zero)", $"{(flagRegister.Value >> 1) & 1}", 0));
-                variables.Add(new("C (bit 0 - carry)", $"{(flagRegister.Value >> 0) & 1}", 0));
+                variables.Add(new("N (Bit 7 - Negative)", $"{(flagsAsByte >> 7) & 1}", 0));
+                variables.Add(new("V (Bit 6 - Overflow)", $"{(flagsAsByte >> 6) & 1}", 0));
+                variables.Add(new("- (Bit 5 - Ignored)", $"{(flagsAsByte >> 5) & 1}", 0));
+                variables.Add(new("B (Bit 4 - Break)", $"{(flagsAsByte >> 4) & 1}", 0));
+                variables.Add(new("D (Bit 3 - Decimal)", $"{(flagsAsByte >> 3) & 1}", 0));
+                variables.Add(new("I (Bit 2 - Irq Disable)", $"{(flagsAsByte >> 2) & 1}", 0));
+                variables.Add(new("Z (Bit 1 - Zero)", $"{(flagsAsByte >> 1) & 1}", 0));
+                variables.Add(new("C (Bit 0 - Carry)", $"{(flagsAsByte >> 0) & 1}", 0));
                 }
                 break;
             case VariableScope.Stack:
             {
                 var buffer = _machineState.Ram.AsSpan().Slice(0x100, 0x100);
-                var currentStack = (byte)_machineState.Registers.First(r => r.RegisterId == RegisterId.SP).Value;
+                var currentStack = (byte)_machineState.SP;
                 for (var i = buffer.Length - 1; i >= 0; i--)
                 {
                     var item = buffer[i];
@@ -586,6 +572,11 @@ internal class C64DebuggerServer : DebugAdapterBase
             }
                 break;
             case VariableScope.Stats:
+                // TODO: Add CPU Cycles, Cycles Delta, Cpu Time Delta, Opcode, IRQ, NMI
+                variables.Add(new Variable("Raster Line", $"${_machineState.CurrentRasterLine:x3} ({_machineState.CurrentRasterLine})", 0));
+                variables.Add(new Variable("Raster Cycle", $"${_machineState.CurrentRasterCycle:x4} ({_machineState.CurrentRasterCycle})", 0));
+                variables.Add(new Variable("Zero-$00", $"${_machineState.Zp00:x2} ({_machineState.Zp00})", 0));
+                variables.Add(new Variable("Zero-$01", $"${_machineState.Zp01:x2} ({_machineState.Zp01})", 0));
                 break;
             case VariableScope.VicRegisters:
             {
@@ -618,7 +609,7 @@ internal class C64DebuggerServer : DebugAdapterBase
         _machineState.Ram = memoryResponse.Body.AsSpan().Slice(2).ToArray();
 
         var registerResponse = _monitor.SendCommandAndGetResponse<RegisterResponse>(new RegistersGetCommand());
-        _machineState.Registers = registerResponse.Items;
+        _machineState.UpdateRegisters(registerResponse.Items);
     }
 
     protected override WriteMemoryResponse HandleWriteMemoryRequest(WriteMemoryArguments arguments)
@@ -649,8 +640,43 @@ internal class C64DebuggerServer : DebugAdapterBase
 
     private class MachineState
     {
-        public RegisterValue[] Registers { get; set; } = [];
+        public RegisterValue[] Registers { get; private set; } = [];
 
         public byte[] Ram { get; set; } = [];
+
+        public ushort PC { get; private set; }
+
+        public byte A { get; private set; }
+
+        public byte X { get; private set; }
+
+        public byte Y { get; private set; }
+
+        public byte SP { get; private set; }
+
+        public Mos6502CpuFlags SR { get; private set; }
+
+        public byte Zp00 { get; private set; }
+
+        public byte Zp01 { get; private set; }
+
+        public ushort CurrentRasterLine { get; private set; }
+
+        public ushort CurrentRasterCycle { get; private set; }
+
+        public void UpdateRegisters(RegisterValue[] registers)
+        {
+            Registers = registers;
+            PC = (ushort)Registers.First(r => r.RegisterId == RegisterId.PC).Value;
+            A = (byte)Registers.First(r => r.RegisterId == RegisterId.A).Value;
+            X = (byte)Registers.First(r => r.RegisterId == RegisterId.X).Value;
+            Y = (byte)Registers.First(r => r.RegisterId == RegisterId.Y).Value;
+            SP = (byte)Registers.First(r => r.RegisterId == RegisterId.SP).Value;
+            SR = (Mos6502CpuFlags)(byte)Registers.First(r => r.RegisterId == RegisterId.FLAGS).Value;
+            Zp00 = (byte)Registers.First(r => r.RegisterId == RegisterId.Zero).Value;
+            Zp01 = (byte)Registers.First(r => r.RegisterId == RegisterId.One).Value;
+            CurrentRasterLine = (ushort)Registers.First(r => r.RegisterId == RegisterId.RasterLine).Value;
+            CurrentRasterCycle = (ushort)Registers.First(r => r.RegisterId == RegisterId.Cycle).Value;
+        }
     }
 }

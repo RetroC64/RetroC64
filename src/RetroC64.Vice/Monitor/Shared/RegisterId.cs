@@ -223,7 +223,7 @@ public enum RegisterId : byte
 
     /// <summary>Current raster line.</summary>
     /// <remarks>Platforms: Rasterline.</remarks>
-    Rasterline = 0x35,
+    RasterLine = 0x35,
 
     /// <summary>Current cycle within the raster line.</summary>
     /// <remarks>Platforms: Cycle.</remarks>
