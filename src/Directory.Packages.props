@@ -10,6 +10,7 @@
     <PackageVersion Include="Lunet.Extensions.Logging.SpectreConsole" Version="1.2.0" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="9.0.10" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.10" />
+    <PackageVersion Include="Microsoft.VisualStudio.Shared.VSCodeDebugProtocol" Version="18.0.10427.1" />
     <PackageVersion Include="MinVer" Version="6.0.0" />
     <PackageVersion Include="MSTest" Version="4.0.0" />
     <PackageVersion Include="SkiaSharp" Version="3.119.1" />

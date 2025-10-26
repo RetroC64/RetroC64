@@ -154,6 +154,24 @@ public sealed class ViceMonitor : IDisposable
         SendCommand(command, null);
     }
 
+    public TResponse SendCommandAndGetResponse<TResponse>(MonitorCommand command)
+    {
+        SendCommand(command, null);
+        while (true)
+        {
+            if (_responseQueue.TryDequeue(out var response))
+            {
+                if (response.RequestId.Value == command.RequestId && response is TResponse typedResponse)
+                {
+                    return typedResponse;
+                }
+            }
+            Thread.Sleep(1);
+
+            // TODO: Add timeout?
+        }
+    }
+
     /// <summary>
     /// Attempts to dequeue the next response in a non-blocking manner.
     /// </summary>

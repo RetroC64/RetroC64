@@ -33,7 +33,7 @@ public class C64AppBuilder : IC64FileContainer
     private Func<ViceMonitor, Task>? _customCodeReloadAction;
     private readonly Func<C64AppElement> _factory;
     private C64AppElement? _rootElement;
-
+    
     internal static readonly bool IsDotNetWatch = "1".Equals(Environment.GetEnvironmentVariable("DOTNET_WATCH"), StringComparison.Ordinal);
 
     /// <summary>
@@ -167,15 +167,22 @@ public class C64AppBuilder : IC64FileContainer
         // We start to initialize the app elements (to allow to configure global settings like vice monitor)
         TryInitializeAppElements();
 
+
+
         Log.LogInformationMarkup("👾 Launching VICE Emulator");
         Console.CancelKeyPress += OnConsoleOnCancelKeyPress;
 
+        var monitor = new ViceMonitor();
+
+        // Starts the debugger
+        var debuggerServer = new C64DebuggerServer(this, monitor);
+        debuggerServer.Start();
+        
         var runner = new ViceRunner()
         {
             WorkingDirectory = GetOrCreateBuildFolder()
         };
-        var monitor = new ViceMonitor();
-
+        
         runner.Exited += async () =>
         {
             if (!_cancellationTokenSource.IsCancellationRequested)
