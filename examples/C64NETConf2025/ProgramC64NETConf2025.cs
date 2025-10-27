@@ -85,6 +85,7 @@ public class C64NETConf2025 : C64AppAsmProgram
         //
         // -------------------------------------------------------------------------
         asm.Label(out var startOfCode);
+        asm.BeginCodeSection("Initialization");
 
         BeginAsmInit(asm);
 
@@ -92,6 +93,7 @@ public class C64NETConf2025 : C64AppAsmProgram
         {
             asm.ClearMemoryBy256BytesBlock(SCREEN_CHARACTER_ADDRESS_DEFAULT, 4, 0); // use 32 for spaces
             EndAsmInitAndInfiniteLoop(asm);
+            asm.EndCodeSection();
             return startOfCode;
         }
 
@@ -99,7 +101,12 @@ public class C64NETConf2025 : C64AppAsmProgram
         {
             asm.CopyMemoryBy256BytesBlock(screenBuffer, SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
             EndAsmInitAndInfiniteLoop(asm);
-            asm.ArrangeBlocks([new(screenBuffer, ScreenBuffer.ToArray(), 256)]);
+            asm.EndCodeSection();
+
+            asm
+                .BeginDataSection()
+                .ArrangeBlocks([new(screenBuffer, ScreenBuffer.ToArray(), 256)])
+                .EndDataSection();
             return startOfCode;
         }
 
@@ -159,8 +166,11 @@ public class C64NETConf2025 : C64AppAsmProgram
                 .SetupRasterIrq(irqSpriteScene, 0xF8);
 
             EndAsmInitAndInfiniteLoop(asm);
+            asm.EndCodeSection();
 
-            asm.Label(irqSpriteScene)
+            asm
+                .BeginCodeSection("IrqSpriteScene")
+                .Label(irqSpriteScene)
                 .PushAllRegisters()
 
                 .LDA(VIC2_INTERRUPT) // Acknowledge VIC-II interrupt
@@ -172,11 +182,14 @@ public class C64NETConf2025 : C64AppAsmProgram
                 .STA(VIC2_RASTER) // interrupt on line 248 next frame
 
                 .PopAllRegisters()
-                .RTI();
+                .RTI()
+                .EndCodeSection();
         }
         else if (part == DemoPart.Case3_Full)
         {
-            asm.SetupRasterIrq(irqScene1, 0xF8)
+            asm
+                .BeginCodeSection("FullScene")
+                .SetupRasterIrq(irqScene1, 0xF8)
 
                 .LDA_Imm(charPerIrqStartDefault)
                 .STA(zpCharPerFrame)
@@ -398,6 +411,8 @@ public class C64NETConf2025 : C64AppAsmProgram
                 .STA(VIC2_BG_COLOR0)
 
                 .BNE(returnFromSinIrq); // Always
+
+            asm.EndCodeSection();
         }
 
         // -------------------------------------------------------------------------
@@ -405,7 +420,9 @@ public class C64NETConf2025 : C64AppAsmProgram
         // Animate Sprite Function
         //
         // -------------------------------------------------------------------------
-        asm.Label(animateSpriteFunc)
+        asm
+            .BeginCodeSection("SpriteFunction")
+            .Label(animateSpriteFunc)
             .LDA_Imm(0)
             .STA(zpSpriteHighBitMask)
 
@@ -454,7 +471,8 @@ public class C64NETConf2025 : C64AppAsmProgram
             .LDA(zpSpriteHighBitMask)
             .STA(VIC2_SPRITE_X_MSB)
 
-            .RTS();
+            .RTS()
+            .EndCodeSection();
 
         // -------------------------------------------------------------------------
         //
@@ -473,7 +491,7 @@ public class C64NETConf2025 : C64AppAsmProgram
         C64CharSet.StringToPETScreenCode($"    CODE: XOOFX").CopyTo(screenBufferData.Slice(40 * musicY + musicX));
         if (part == DemoPart.Case3_Full)
         {
-            C64CharSet.StringToPETScreenCode($"   MUSIC: {sidFile.Author.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 2) + musicX));
+            C64CharSet.StringToPETScreenCode($"   MUSIC: {sidFile!.Author.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 2) + musicX));
             C64CharSet.StringToPETScreenCode($"   TITLE: {sidFile.Name.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 3) + musicX));
             C64CharSet.StringToPETScreenCode($"RELEASED: {sidFile.Released.ToUpperInvariant()}").CopyTo(screenBufferData.Slice(40 * (musicY + 4) + musicX));
         }
@@ -509,8 +527,11 @@ public class C64NETConf2025 : C64AppAsmProgram
         {
             blocks.Add(sidPlayer!.GetMusicBlock()); // This is the only block constrained to be at specific address $1000
         }
-        
-        asm.ArrangeBlocks(blocks.ToArray());
+
+        asm
+            .BeginDataSection("DemoData")
+            .ArrangeBlocks(blocks.ToArray())
+            .EndDataSection();
 
         return startOfCode;
     }

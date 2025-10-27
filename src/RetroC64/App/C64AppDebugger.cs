@@ -2,13 +2,17 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using System.Globalization;
+using Asm6502;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using Newtonsoft.Json;
 using RetroC64.Vice.Monitor;
-using System.Net.Sockets;
-using Asm6502;
 using RetroC64.Vice.Monitor.Commands;
 using RetroC64.Vice.Monitor.Responses;
+using Spectre.Console;
+using System.Net.Sockets;
+
 // ReSharper disable InconsistentNaming
 
 namespace RetroC64.App;
@@ -21,6 +25,8 @@ internal class C64DebuggerServer : DebugAdapterBase
     private System.Threading.Thread? _thread;
     private readonly ViceMonitor _monitor;
     private readonly MachineState _machineState;
+    private readonly JsonSerializer _jsonSerializer;
+    private Mos6502AssemblerDebugMap? _debugMap;
 
     public C64DebuggerServer(C64AppBuilder builder, ViceMonitor monitor)
     {
@@ -29,20 +35,40 @@ internal class C64DebuggerServer : DebugAdapterBase
         _tcpListener = new TcpListener(System.Net.IPAddress.Loopback, 6503);
         _monitor = monitor;
         _machineState = new();
+        _jsonSerializer = JsonSerializer.CreateDefault(new JsonSerializerSettings()
+        {
+            Formatting = Formatting.None
+        });
     }
     
     protected override ResponseBody HandleProtocolRequest(string requestType, object requestArgs)
     {
-        _context.Info($"C64 Debugger RAW Request: {requestType} {requestArgs}");
+        var writer = new StringWriter();
+        try
+        {
+            _jsonSerializer.Serialize(writer, requestArgs);
+        }
+        catch
+        {
+            // ignore
+        }
+
+        _context.InfoMarkup($"C64 Debugger Request: [yellow]{Markup.Escape(requestType)}[/] {Markup.Escape(writer.ToString())}");
         return base.HandleProtocolRequest(requestType, requestArgs);
     }
 
     protected override void HandleProtocolError(Exception ex)
     {
-        _context.Error($"C64 Debugger Protocol Error: {ex}");
+        _context.ErrorMarkup($"C64 Debugger Error: [red]{Markup.Escape(ex.ToString())}[/red]");
     }
 
     public bool Enabled { get; private set; }
+
+    public void SetDebugMap(Mos6502AssemblerDebugMap? debugMap)
+    {
+        // TODO: Handle multiple debug maps (multiple code loaded)
+        _debugMap = debugMap;
+    }
 
     public void Start()
     {
@@ -60,7 +86,6 @@ internal class C64DebuggerServer : DebugAdapterBase
         while (true)
         {
             var socket = _tcpListener.AcceptSocket();
-            _context.Info("C64 Debug Adapter Server accepted connection");
             using (var stdio = new NetworkStream(socket))
             {
                 InitializeProtocolClient(stdio, stdio);
@@ -84,14 +109,16 @@ internal class C64DebuggerServer : DebugAdapterBase
 
     protected override AttachResponse HandleAttachRequest(AttachArguments arguments)
     {
-        _context.Info($"HandleAttachRequest");
-
-        foreach(var argPair in arguments.ConfigurationProperties)
+        // We expect only RetroC64 debugger type to work
+        if (!arguments.ConfigurationProperties.TryGetValue("type", out var token) || token.ToString() != "RetroC64")
         {
-            _context.Info($"  Arg: {argPair.Key} = {argPair.Value}");
+            throw new InvalidOperationException("Invalid debugger type. Expecting `RetroC64`");
         }
-        //Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Entry){});
 
+        //foreach(var argPair in arguments.ConfigurationProperties)
+        //{
+        //    _context.Info($"  Arg: {argPair.Key} = {argPair.Value}");
+        //}
         return new AttachResponse();
     }
 
@@ -114,7 +141,6 @@ internal class C64DebuggerServer : DebugAdapterBase
     
     protected override ConfigurationDoneResponse HandleConfigurationDoneRequest(ConfigurationDoneArguments arguments)
     {
-        _context.Info("Configuration done");
         Protocol.SendEvent(new ThreadEvent(ThreadEvent.ReasonValue.Started, 0));
         Enabled = true;
         return new ConfigurationDoneResponse();
@@ -122,7 +148,6 @@ internal class C64DebuggerServer : DebugAdapterBase
     
     protected override ContinueResponse HandleContinueRequest(ContinueArguments arguments)
     {
-        _context.Info("Continue Requested");
         _monitor.SendCommand(new ExitCommand());
 
         return new ContinueResponse()
@@ -138,19 +163,94 @@ internal class C64DebuggerServer : DebugAdapterBase
 
     protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
     {
-        _context.Info($"C64 Debugger {nameof(HandleDisassembleRequest)} MemoryReference: {arguments.MemoryReference}");
-        return new DisassembleResponse();
+        // disassemble {"memoryReference":"2322","offset":0,"instructionOffset":-50,"instructionCount":100,"resolveSymbols":true}
+        if (!TryParseMemoryReference(arguments.MemoryReference, out int address))
+        {
+            _context.Info($"Error trying to parse Memory reference `{arguments.MemoryReference}`");
+            return new DisassembleResponse();
+        }
+        
+        address = address + (arguments.Offset ?? 0);
+
+        // TODO: collect memory maps from compilation (which part is assembly...etc.)
+        var response = new DisassembleResponse();
+
+        // Prescan for max instruction count;
+        var ram = _machineState.Ram.AsSpan();
+        var span = _machineState.Ram.AsSpan().Slice(address);
+
+        int instructionCount = 0;
+        int byteOffset = 0;
+
+        // Show empty instructions before the current instruction offset
+        // As we can't disassemble backwards without a memory map, we just show empty instructions
+        if (arguments.InstructionOffset.HasValue)
+        {
+            var instructionOffset = arguments.InstructionOffset.Value;
+            if (instructionOffset < 0)
+            {
+                for (int i = -1; i >= instructionOffset; i--)
+                {
+                    var byteAddress = address + i;
+                    if (byteAddress < 0) byteAddress = 0;
+
+                    response.Instructions.Add(new DisassembledInstruction()
+                    {
+                        Address = $"0x{byteAddress:X4}", // Display hexadecimal address as the instruction is also using this
+                        InstructionBytes = $"{ram[byteAddress]:x2}",
+                        Instruction = "..." // Cannot decode instruction backward
+                    });
+                }
+            }
+            else
+            {
+                // Otherwise skip instructions
+                while (instructionOffset > 0 && Mos6510Instruction.TryDecode(span.Slice(byteOffset), out var instruction, out var sizeInBytes))
+                {
+                    byteOffset += sizeInBytes;
+                    instructionOffset--;
+                }
+            }
+        }
+        
+        while (instructionCount < arguments.InstructionCount && Mos6510Instruction.TryDecode(span.Slice(byteOffset), out var instruction, out var sizeInBytes))
+        {
+            // TODO: handle relative jumps
+            response.Instructions.Add(new DisassembledInstruction()
+            {
+                Address = $"0x{address + byteOffset:X4}", // Display hexadecimal address as the instruction is also using this
+                InstructionBytes = string.Join(" ", span.Slice(byteOffset, sizeInBytes).ToArray().Select(x => $"{x:x2}")),
+                Instruction = instruction.ToString()
+            });
+
+            byteOffset += sizeInBytes;
+            instructionCount++;
+        }
+
+        return response;
+    }
+
+    private static bool TryParseMemoryReference(string text, out int address)
+    {
+        if (text.Length > 2 && text[0] == '0' && text[1] == 'x')
+        {
+            return int.TryParse(text[2..], NumberStyles.HexNumber, null, out address);
+        }
+        return int.TryParse(text, out address);
+    }
+
+    private static string CreateMemoryReference(int address)
+    {
+        return $"0x{address:X4}";
     }
 
     protected override DisconnectResponse HandleDisconnectRequest(DisconnectArguments arguments)
     {
-        _context.Info("C64 Debugger Disconnect");
         return new DisconnectResponse();
     }
 
     protected override EvaluateResponse HandleEvaluateRequest(EvaluateArguments arguments)
     {
-        _context.Info($"C64 {nameof(HandleEvaluateRequest)}");
         return new EvaluateResponse()
         {
             Result = "0",
@@ -184,14 +284,14 @@ internal class C64DebuggerServer : DebugAdapterBase
             SupportsSetVariable = true,
 
             SupportsHitConditionalBreakpoints = true,
-            SupportsEvaluateForHovers = true,
+            //SupportsEvaluateForHovers = true,
             SupportsTerminateRequest = true,
 
             SupportsReadMemoryRequest = true,
             SupportsWriteMemoryRequest = true,
             SupportsDisassembleRequest = true,
 
-            SupportsGotoTargetsRequest = true,
+            //SupportsGotoTargetsRequest = true,
         };
 
         return new InitializeResponse()
@@ -463,7 +563,6 @@ internal class C64DebuggerServer : DebugAdapterBase
     
     protected override StackTraceResponse HandleStackTraceRequest(StackTraceArguments arguments)
     {
-        _context.Info("HandleStackTraceRequest");
         return new StackTraceResponse([
                 new StackFrame()
                 {
@@ -471,7 +570,7 @@ internal class C64DebuggerServer : DebugAdapterBase
                     Name = "Main",
                     Line = 10,
                     Column = 1,
-                    InstructionPointerReference = $"{_machineState.PC}",
+                    InstructionPointerReference = CreateMemoryReference(_machineState.PC),
                     Source = new Source()
                     {
                         Name = "ProgramC64NETConf2025",
@@ -505,7 +604,6 @@ internal class C64DebuggerServer : DebugAdapterBase
     
     protected override TerminateResponse HandleTerminateRequest(TerminateArguments arguments)
     {
-        _context.Info("Terminate done");
         return new TerminateResponse();
     }
     
@@ -517,7 +615,7 @@ internal class C64DebuggerServer : DebugAdapterBase
     
     protected override ThreadsResponse HandleThreadsRequest(ThreadsArguments arguments)
     {
-        _context.Info("C64 Debugger Request Threads");
+        // Only one thread
         return new ThreadsResponse([new(0, "C64")]);
     }
     
@@ -526,8 +624,8 @@ internal class C64DebuggerServer : DebugAdapterBase
         var response = new VariablesResponse();
         var variables = response.Variables;
         var scope = (VariableScope)arguments.VariablesReference;
-        _context.Info($"C64 {nameof(HandleVariablesRequest)} : {scope}");
 
+        //_context.Info($"C64 {nameof(HandleVariablesRequest)} : {scope}");
         switch (scope)
         {
             case VariableScope.None:
@@ -535,7 +633,7 @@ internal class C64DebuggerServer : DebugAdapterBase
             case VariableScope.CpuRegisters:
                 variables.Add(new Variable("PC (Program Counter)", $"${_machineState.PC:x4} ({_machineState.PC})", 0)
                 {
-                    MemoryReference = $"{_machineState.PC}"
+                    MemoryReference = "RAM" //CreateMemoryReference(_machineState.PC)
                 });
                 variables.Add(new Variable("A (Accumulator)", $"${_machineState.A:x2} ({_machineState.A})", 0));
                 variables.Add(new Variable("X (Register)", $"${_machineState.X:x2} ({_machineState.X})", 0));
@@ -573,14 +671,14 @@ internal class C64DebuggerServer : DebugAdapterBase
                 break;
             case VariableScope.Stats:
                 // TODO: Add CPU Cycles, Cycles Delta, Cpu Time Delta, Opcode, IRQ, NMI
-                variables.Add(new Variable("Raster Line", $"${_machineState.CurrentRasterLine:x3} ({_machineState.CurrentRasterLine})", 0));
-                variables.Add(new Variable("Raster Cycle", $"${_machineState.CurrentRasterCycle:x4} ({_machineState.CurrentRasterCycle})", 0));
+                variables.Add(new Variable("Raster Line", $"${_machineState.RasterLine:x3} ({_machineState.RasterLine})", 0));
+                variables.Add(new Variable("Raster Cycle", $"${_machineState.RasterCycle:x4} ({_machineState.RasterCycle})", 0));
                 variables.Add(new Variable("Zero-$00", $"${_machineState.Zp00:x2} ({_machineState.Zp00})", 0));
                 variables.Add(new Variable("Zero-$01", $"${_machineState.Zp01:x2} ({_machineState.Zp01})", 0));
                 break;
             case VariableScope.VicRegisters:
             {
-                var buffer = _machineState.Ram.AsSpan().Slice(0xdf00, 0x30);
+                var buffer = _machineState.Ram.AsSpan().Slice(0xd000, 0x30);
                 for (var i = 0; i < buffer.Length; i++)
                 {
                     var item = buffer[i];
@@ -603,6 +701,13 @@ internal class C64DebuggerServer : DebugAdapterBase
         return response;
     }
 
+
+    protected override WriteMemoryResponse HandleWriteMemoryRequest(WriteMemoryArguments arguments)
+    {
+        // TODO
+        return new WriteMemoryResponse();
+    }
+
     private void CaptureMachineState()
     {
         var memoryResponse = _monitor.SendCommandAndGetResponse<GenericResponse>(new MemoryGetCommand() { StartAddress = 0x0000, EndAddress = 0xFFFF });
@@ -610,12 +715,6 @@ internal class C64DebuggerServer : DebugAdapterBase
 
         var registerResponse = _monitor.SendCommandAndGetResponse<RegisterResponse>(new RegistersGetCommand());
         _machineState.UpdateRegisters(registerResponse.Items);
-    }
-
-    protected override WriteMemoryResponse HandleWriteMemoryRequest(WriteMemoryArguments arguments)
-    {
-        // TODO
-        return new WriteMemoryResponse();
     }
 
     private class C64AppDebuggerContext : C64AppContext
@@ -636,8 +735,7 @@ internal class C64DebuggerServer : DebugAdapterBase
         SpriteRegisters = 6,
         SidRegisters = 7,
     }
-
-
+    
     private class MachineState
     {
         public RegisterValue[] Registers { get; private set; } = [];
@@ -660,9 +758,9 @@ internal class C64DebuggerServer : DebugAdapterBase
 
         public byte Zp01 { get; private set; }
 
-        public ushort CurrentRasterLine { get; private set; }
+        public ushort RasterLine { get; private set; }
 
-        public ushort CurrentRasterCycle { get; private set; }
+        public ushort RasterCycle { get; private set; }
 
         public void UpdateRegisters(RegisterValue[] registers)
         {
@@ -675,8 +773,8 @@ internal class C64DebuggerServer : DebugAdapterBase
             SR = (Mos6502CpuFlags)(byte)Registers.First(r => r.RegisterId == RegisterId.FLAGS).Value;
             Zp00 = (byte)Registers.First(r => r.RegisterId == RegisterId.Zero).Value;
             Zp01 = (byte)Registers.First(r => r.RegisterId == RegisterId.One).Value;
-            CurrentRasterLine = (ushort)Registers.First(r => r.RegisterId == RegisterId.RasterLine).Value;
-            CurrentRasterCycle = (ushort)Registers.First(r => r.RegisterId == RegisterId.Cycle).Value;
+            RasterLine = (ushort)Registers.First(r => r.RegisterId == RegisterId.RasterLine).Value;
+            RasterCycle = (ushort)Registers.First(r => r.RegisterId == RegisterId.RasterCycle).Value;
         }
     }
 }

@@ -2,6 +2,8 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using Asm6502;
+
 namespace RetroC64.App;
 
 /// <summary>
@@ -15,5 +17,6 @@ public interface IC64FileContainer
     /// <param name="context">Current app context.</param>
     /// <param name="filename">Target filename. Extension determines handling.</param>
     /// <param name="data">File content.</param>
-    void AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data);
+    /// <param name="debugMap">Optional debug map associated with the file.</param>
+    void AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data, C64AssemblerDebugMap? debugMap = null);
 }

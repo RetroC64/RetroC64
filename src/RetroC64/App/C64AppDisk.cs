@@ -2,6 +2,7 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using Asm6502;
 using RetroC64.Storage;
 using Spectre.Console;
 
@@ -13,6 +14,7 @@ namespace RetroC64.App;
 public class C64AppDisk : C64AppElement, IC64FileContainer
 {
     private readonly Disk64 _disk = new();
+    private readonly List<C64AssemblerDebugMap?> _debugMaps = new();
 
     /// <summary>
     /// Gets the underlying D64 disk instance.
@@ -24,6 +26,7 @@ public class C64AppDisk : C64AppElement, IC64FileContainer
     /// </summary>
     protected override void Build(C64AppBuildContext context)
     {
+        _debugMaps.Clear();
         _disk.Format(Name.ToUpperInvariant());
         context.PushFileContainer(this);
         try
@@ -35,11 +38,12 @@ public class C64AppDisk : C64AppElement, IC64FileContainer
             context.PopFileContainer();
         }
 
-        context.AddFile(context, $"{Name}.d64", _disk.UnsafeRawImage);
+        // TODO: For now, we can only propagate the first debug map
+        context.AddFile(context, $"{Name}.d64", _disk.UnsafeRawImage, _debugMaps.Count > 0 ? _debugMaps[0] : null);
     }
     
     /// <inheritdoc />
-    void IC64FileContainer.AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data)
+    void IC64FileContainer.AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data, C64AssemblerDebugMap? debugMap)
     {
         filename = filename.ToUpperInvariant();
         if (filename.EndsWith(".PRG", StringComparison.OrdinalIgnoreCase))
@@ -47,6 +51,7 @@ public class C64AppDisk : C64AppElement, IC64FileContainer
             filename = filename[..^4];
             context.InfoMarkup($"➕ Adding file [yellow]{Markup.Escape(filename)}[/] ([cyan]{data.Length}[/] bytes) to disk [yellow]{Name}[/]");
             _disk.WriteFile(filename, data);
+            _debugMaps.Add(debugMap);
         }
         else
         {

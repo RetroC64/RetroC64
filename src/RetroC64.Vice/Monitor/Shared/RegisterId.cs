@@ -227,7 +227,7 @@ public enum RegisterId : byte
 
     /// <summary>Current cycle within the raster line.</summary>
     /// <remarks>Platforms: Cycle.</remarks>
-    Cycle = 0x36,
+    RasterCycle = 0x36,
 
     /// <summary>CPU I/O port at $00.</summary>
     /// <remarks>Platforms: 6510, c64dtv.</remarks>

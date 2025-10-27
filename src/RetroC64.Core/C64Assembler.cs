@@ -20,3 +20,8 @@ public class C64Assembler(ushort baseAddress = 0xC000) : Mos6510Assembler<C64Ass
         return this;
     }
 }
+
+public class C64AssemblerDebugMap : Mos6502AssemblerDebugMap
+{
+    public List<IMos6502Label> Labels { get; } = new();
+}

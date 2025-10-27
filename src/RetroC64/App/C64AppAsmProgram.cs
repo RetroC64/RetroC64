@@ -26,8 +26,20 @@ public abstract class C64AppAsmProgram : C64AppElement
         basicCompiler.Compile("0SYS0000");
 
         var startAsm = (ushort)(basicCompiler.StartAddress + basicCompiler.CurrentOffset);
-        using var asm = new C64Assembler(startAsm);
+        var debugMap = new C64AssemblerDebugMap();
+        using var asm = new C64Assembler()
+        {
+            DebugMap = debugMap
+        };
+        asm.Org(startAsm, Name);
         var startLabel = Build(context, asm);
+
+        var labels = new HashSet<IMos6502Label>();
+        asm.CollectLabels(labels);
+
+        // Add labels in the order they were declared
+        debugMap.Labels.AddRange(labels.OrderBy(x => x is Mos6502Label label ? label.Address : ((Mos6502LabelZp)x).Address));
+
         asm.End();
 
         if (!startLabel.IsBound)
@@ -44,7 +56,7 @@ public abstract class C64AppAsmProgram : C64AppElement
         var basicBuffer = basicCompiler.Compile($"0SYS{startLabel.Address:0000}");
 
         byte[] programData = [.. basicBuffer, .. asm.Buffer];
-        context.AddFile(context, $"{Name.ToLowerInvariant()}.prg", programData);
+        context.AddFile(context, $"{Name.ToLowerInvariant()}.prg", programData, debugMap);
 
         var asmBuffer = asm.Buffer.ToArray();
 

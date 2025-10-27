@@ -2,6 +2,7 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using Asm6502;
 using Lunet.Extensions.Logging.SpectreConsole;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -22,7 +23,7 @@ public class C64AppBuilder : IC64FileContainer
 {
     private bool _commandLinePrepared;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly List<string> _buildGeneratedFilesForVice = new();
+    private readonly List<(string FileName, Mos6502AssemblerDebugMap? DebugMap)> _buildGeneratedFilesForVice = new();
     private readonly ManualResetEventSlim _hotReloadEvent = new(false);
     private CodeReloadEvent? _codeReloadEvent;
     private readonly CancellationTokenSource _cancellationTokenSource;
@@ -261,12 +262,16 @@ public class C64AppBuilder : IC64FileContainer
 
                     if (_buildGeneratedFilesForVice.Count > 0)
                     {
+                        var fileToLaunch = _buildGeneratedFilesForVice[0];
+
+                        var debugMap = fileToLaunch.DebugMap;
+                        debuggerServer.SetDebugMap(debugMap);
+
                         if (!_isLiveFileAutoStarted || _customCodeReloadAction is null)
                         {
-                            var fileToLaunch = _buildGeneratedFilesForVice[0];
                             monitor.SendCommand(new AutostartCommand()
                             {
-                                Filename = fileToLaunch,
+                                Filename = fileToLaunch.FileName,
                                 RunAfterLoading = true
                             });
 
@@ -415,7 +420,7 @@ public class C64AppBuilder : IC64FileContainer
         return Settings.RetroC64BuildFolder;
     }
     
-    void IC64FileContainer.AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data)
+    void IC64FileContainer.AddFile(C64AppContext context, string filename, ReadOnlySpan<byte> data, C64AssemblerDebugMap? debugMap)
     {
         var buildFolder = GetOrCreateBuildFolder();
 
@@ -449,7 +454,7 @@ public class C64AppBuilder : IC64FileContainer
         Log.LogInformationMarkup($"💽 Creating file [yellow]{Markup.Escape(newFileName)}[/] ([cyan]{data.Length}[/] bytes)");
         
         FileService.SaveFile(fullPath, data);
-        _buildGeneratedFilesForVice.Add(newFileName); // Keep only the filename, not the full path for VICE
+        _buildGeneratedFilesForVice.Add((newFileName, debugMap)); // Keep only the filename, not the full path for VICE
     }
 
     internal record CodeReloadEvent(LogLevel Level, string Reason, Action? Action = null);
