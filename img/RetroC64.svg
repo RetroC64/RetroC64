@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="1024"
+   height="1024"
+   viewBox="0 0 270.93333 270.93333"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   sodipodi:docname="RetroC64.svg"
+   inkscape:export-filename="logo_retroc64.png"
+   inkscape:export-xdpi="48"
+   inkscape:export-ydpi="48"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="true"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="0.89472898"
+     inkscape:cx="391.73874"
+     inkscape:cy="390.62108"
+     inkscape:window-width="3840"
+     inkscape:window-height="2054"
+     inkscape:window-x="-11"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <linearGradient
+       id="swatch20"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop20" />
+    </linearGradient>
+    <linearGradient
+       id="swatch19"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#50505a;stop-opacity:1;"
+         offset="0"
+         id="stop19" />
+    </linearGradient>
+    <linearGradient
+       id="swatch14"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#f80001;stop-opacity:1;"
+         offset="0"
+         id="stop14" />
+    </linearGradient>
+    <linearGradient
+       id="swatch13"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#f80001;stop-opacity:1;"
+         offset="0"
+         id="stop13" />
+    </linearGradient>
+    <linearGradient
+       id="swatch12"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#f80001;stop-opacity:1;"
+         offset="0"
+         id="stop12" />
+    </linearGradient>
+    <linearGradient
+       id="swatch11"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#f80001;stop-opacity:1;"
+         offset="0"
+         id="stop11" />
+    </linearGradient>
+    <linearGradient
+       id="swatch10"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#f80001;stop-opacity:1;"
+         offset="0"
+         id="stop10" />
+    </linearGradient>
+    <linearGradient
+       id="swatch9"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#f80001;stop-opacity:1;"
+         offset="0"
+         id="stop9" />
+    </linearGradient>
+    <linearGradient
+       id="swatch6"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop6" />
+    </linearGradient>
+    <linearGradient
+       id="swatch5"
+       inkscape:swatch="solid"
+       inkscape:label="c64-blue">
+      <stop
+         style="stop-color:#3966ad;stop-opacity:1;"
+         offset="0"
+         id="stop5" />
+    </linearGradient>
+    <linearGradient
+       id="swatch4"
+       inkscape:swatch="solid"
+       inkscape:label="c64-green">
+      <stop
+         style="stop-color:#4cab27;stop-opacity:1;"
+         offset="0"
+         id="stop4" />
+    </linearGradient>
+    <linearGradient
+       id="swatch3"
+       inkscape:swatch="solid"
+       inkscape:label="c64-yellow">
+      <stop
+         style="stop-color:#ece304;stop-opacity:1;"
+         offset="0"
+         id="stop3" />
+    </linearGradient>
+    <linearGradient
+       id="swatch2"
+       inkscape:swatch="solid"
+       inkscape:label="c64-orange">
+      <stop
+         style="stop-color:#fb6a01;stop-opacity:1;"
+         offset="0"
+         id="stop2" />
+    </linearGradient>
+    <linearGradient
+       id="swatch1"
+       inkscape:swatch="solid"
+       inkscape:label="c64-red">
+      <stop
+         style="stop-color:#f80001;stop-opacity:1;"
+         offset="0"
+         id="stop1" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#swatch2"
+       id="linearGradient11"
+       x1="13.875379"
+       y1="108.80643"
+       x2="256.87537"
+       y2="108.80643"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(0.09128644,0.89137459)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#swatch3"
+       id="linearGradient12"
+       x1="14.049621"
+       y1="132.50833"
+       x2="257.04962"
+       y2="132.50833"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(-0.08295566,-0.00360489)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#swatch4"
+       id="linearGradient13"
+       x1="13.79337"
+       y1="156.4928"
+       x2="256.79337"
+       y2="156.4928"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(0.17329474,-1.1811543)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#swatch5"
+       id="linearGradient14"
+       x1="11.640718"
+       y1="178.11856"
+       x2="254.64072"
+       y2="178.11856"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(2.3259465)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#swatch19"
+       id="linearGradient29"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(12.496505,-1.3885006)"
+       x1="5.4435439"
+       y1="42.754515"
+       x2="268.96881"
+       y2="42.754515" />
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#ffffff;fill-rule:evenodd;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect1"
+       width="261.9375"
+       height="261.9375"
+       x="3.6513841"
+       y="4.8792706"
+       rx="21.166666"
+       ry="21.166666" />
+    <rect
+       style="fill:#f80001;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.375409"
+       id="rect10"
+       width="243"
+       height="13.418181"
+       x="13.966665"
+       y="80.181801"
+       rx="6.6257377"
+       inkscape:label="red" />
+    <rect
+       style="fill:url(#linearGradient11);fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.375409"
+       id="rect10-4"
+       width="243"
+       height="13.418181"
+       x="13.966665"
+       y="102.98872"
+       rx="6.6257377"
+       inkscape:label="orange" />
+    <rect
+       style="fill:url(#linearGradient12);fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.375409"
+       id="rect10-5"
+       width="243"
+       height="13.418181"
+       x="13.966665"
+       y="125.79563"
+       rx="6.6257377"
+       inkscape:label="yellow" />
+    <rect
+       style="fill:url(#linearGradient13);fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.375409"
+       id="rect10-1"
+       width="243"
+       height="13.418181"
+       x="13.966665"
+       y="148.60255"
+       rx="6.6257377"
+       inkscape:label="green" />
+    <rect
+       style="fill:url(#linearGradient14);fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.375409"
+       id="rect10-14"
+       width="243"
+       height="13.418181"
+       x="13.966665"
+       y="171.40947"
+       rx="6.6257377"
+       inkscape:label="blue" />
+    <text
+       xml:space="preserve"
+       style="font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:#999999;stroke:#000000;stroke-width:3.96874995;stroke-dasharray:none;stroke-opacity:1"
+       x="38.860233"
+       y="256.54211"
+       id="text18"><tspan
+         sodipodi:role="line"
+         id="tspan18"
+         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:#999999;stroke:#000000;stroke-width:3.96874995;stroke-dasharray:none;stroke-opacity:1"
+         x="38.860233"
+         y="256.54211">C<tspan
+   style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';stroke-width:3.96874995;stroke-dasharray:none"
+   id="tspan29">64</tspan></tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:79.375px;line-height:5.16765px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:#999999;fill-opacity:1;stroke:#000000;stroke-width:3.96874995;stroke-dasharray:none;stroke-opacity:1"
+       x="11.244673"
+       y="73.556946"
+       id="text19"><tspan
+         sodipodi:role="line"
+         id="tspan19"
+         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:normal;font-size:79.375px;line-height:5.16765px;font-family:'Monaspace Krypton';-inkscape-font-specification:'Monaspace Krypton Ultra-Bold';fill:#999999;fill-opacity:1;stroke:#000000;stroke-width:3.96874995;stroke-dasharray:none;stroke-opacity:1"
+         x="11.244673"
+         y="73.556946">RETRO</tspan></text>
+  </g>
+  <metadata
+     id="metadata1">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <cc:license
+           rdf:resource="http://creativecommons.org/licenses/by-nc/4.0/" />
+      </cc:Work>
+      <cc:License
+         rdf:about="http://creativecommons.org/licenses/by-nc/4.0/">
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Reproduction" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Distribution" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#Notice" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#Attribution" />
+        <cc:prohibits
+           rdf:resource="http://creativecommons.org/ns#CommercialUse" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#DerivativeWorks" />
+      </cc:License>
+    </rdf:RDF>
+  </metadata>
+</svg>
