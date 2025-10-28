@@ -9,9 +9,9 @@
    id="svg1"
    inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
    sodipodi:docname="RetroC64.svg"
-   inkscape:export-filename="logo_retroc64.png"
-   inkscape:export-xdpi="48"
-   inkscape:export-ydpi="48"
+   inkscape:export-filename="RetroC64.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -29,15 +29,16 @@
      inkscape:pagecheckerboard="true"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="px"
-     inkscape:zoom="0.89472898"
-     inkscape:cx="391.73874"
-     inkscape:cy="390.62108"
+     inkscape:zoom="1.2653379"
+     inkscape:cx="405.03016"
+     inkscape:cy="558.3489"
      inkscape:window-width="3840"
      inkscape:window-height="2054"
      inkscape:window-x="-11"
      inkscape:window-y="-11"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer1" />
+     inkscape:current-layer="layer1"
+     showgrid="false" />
   <defs
      id="defs1">
     <linearGradient
@@ -268,28 +269,28 @@
        inkscape:label="blue" />
     <text
        xml:space="preserve"
-       style="font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:#999999;stroke:#000000;stroke-width:3.96874995;stroke-dasharray:none;stroke-opacity:1"
+       style="font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:#999999;stroke:#000000;stroke-width:2.64583;stroke-dasharray:none;stroke-opacity:1"
        x="38.860233"
        y="256.54211"
        id="text18"><tspan
          sodipodi:role="line"
          id="tspan18"
-         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:#999999;stroke:#000000;stroke-width:3.96874995;stroke-dasharray:none;stroke-opacity:1"
+         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:#999999;stroke:#000000;stroke-width:2.64583;stroke-dasharray:none;stroke-opacity:1"
          x="38.860233"
-         y="256.54211">C<tspan
-   style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';stroke-width:3.96874995;stroke-dasharray:none"
-   id="tspan29">64</tspan></tspan></text>
+         y="256.54211"><tspan
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';stroke-width:2.64583;stroke-dasharray:none"
+           id="tspan29">C64</tspan></tspan></text>
     <text
        xml:space="preserve"
-       style="font-size:79.375px;line-height:5.16765px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:#999999;fill-opacity:1;stroke:#000000;stroke-width:3.96874995;stroke-dasharray:none;stroke-opacity:1"
-       x="11.244673"
+       style="font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:#999999;fill-opacity:1;stroke:#000000;stroke-width:2.64583;stroke-dasharray:none;stroke-opacity:1"
+       x="24.17625"
        y="73.556946"
        id="text19"><tspan
          sodipodi:role="line"
          id="tspan19"
-         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:normal;font-size:79.375px;line-height:5.16765px;font-family:'Monaspace Krypton';-inkscape-font-specification:'Monaspace Krypton Ultra-Bold';fill:#999999;fill-opacity:1;stroke:#000000;stroke-width:3.96874995;stroke-dasharray:none;stroke-opacity:1"
-         x="11.244673"
-         y="73.556946">RETRO</tspan></text>
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:84.6667px;line-height:5.51216px;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:#999999;fill-opacity:1;stroke:#000000;stroke-width:2.64583;stroke-dasharray:none;stroke-opacity:1"
+         x="24.17625"
+         y="73.556946">Retro</tspan></text>
   </g>
   <metadata
      id="metadata1">
