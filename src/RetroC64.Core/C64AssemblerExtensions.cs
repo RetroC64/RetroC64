@@ -6,8 +6,9 @@
 
 using Asm6502;
 using Asm6502.Expressions;
-using static RetroC64.C64Registers;
+using System.Runtime.CompilerServices;
 using static Asm6502.Mos6502Factory;
+using static RetroC64.C64Registers;
 
 namespace RetroC64;
 
@@ -22,10 +23,12 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the stack and X register.
     /// </remarks>
-    public static C64Assembler SetupStack(this C64Assembler asm, byte stackValue = 0xFF)
+    public static C64Assembler SetupStack(this C64Assembler asm, byte stackValue = 0xFF, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
         => asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LDX_Imm(stackValue)
-            .TXS();
+            .TXS()
+            .EndFunction();
 
     /// <summary>
     /// Configures the CPU port to enable full RAM access on the C64.
@@ -36,10 +39,12 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static C64Assembler SetupRamAccess(this C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.FullRam)
+    public static C64Assembler SetupRamAccess(this C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.FullRam, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
         => asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LDA_Imm(defaultFlags)
-            .STA(C64_CPU_PORT); // Store in $01, which is the RAM setup register for C64
+            .STA(C64_CPU_PORT) // Store in $01, which is the RAM setup register for C64
+            .EndFunction();
 
     /// <summary>
     /// Disables all interrupts for both CIA chips and acknowledges any pending VIC-II interrupt.
@@ -49,8 +54,9 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static C64Assembler DisableAllIrq(this C64Assembler asm)
+    public static C64Assembler DisableAllIrq(this C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
         => asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LDA_Imm(CIAInterruptFlags.ClearAllInterrupts)
             .STA(CIA1_INTERRUPT_CONTROL) // CIA1 IRQs
             .STA(CIA2_INTERRUPT_CONTROL) // CIA2 IRQs
@@ -59,7 +65,8 @@ public static class C64AssemblerExtensions
             .LDA(CIA2_INTERRUPT_CONTROL) // Clear any pending CIA2 IRQ
 
             .LDA(VIC2_INTERRUPT)
-            .STA(VIC2_INTERRUPT); // Acknowledge any pending VIC IRQ
+            .STA(VIC2_INTERRUPT) // Acknowledge any pending VIC IRQ
+            .EndFunction();
 
     /// <summary>
     /// Clears block of 256 bytes in memory starting at the specified address.
@@ -72,11 +79,12 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifiers the A and X registers.
     /// </remarks>
-    public static C64Assembler ClearMemoryBy256BytesBlock(this C64Assembler asm, ushort address, byte count, byte value = 0)
+    public static C64Assembler ClearMemoryBy256BytesBlock(this C64Assembler asm, ushort address, byte count, byte value = 0, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         if (count == 0) return asm;
 
         asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LDA_Imm(value) // Load the value to clear
             .LDX_Imm(0); // Initialize X to 0
 
@@ -92,6 +100,7 @@ public static class C64AssemblerExtensions
             .DEX()
             .BNE(loop_ClearMemoryBy256BytesBlock); // If X is not zero, repeat the loop
 
+        asm.EndFunction();
         return asm;
     }
 
@@ -107,10 +116,11 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifiers the A and X registers.
     /// </remarks>
-    public static C64Assembler CopyMemoryBy256BytesBlock(this C64Assembler asm, Mos6502Label src, ushort dstAddress, byte count)
+    public static C64Assembler CopyMemoryBy256BytesBlock(this C64Assembler asm, Mos6502Label src, ushort dstAddress, byte count, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         if (count == 0) return asm;
         asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LDX_Imm(0); // Initialize X to 0
 
         asm
@@ -125,8 +135,9 @@ public static class C64AssemblerExtensions
         asm
             .DEX()
             .BNE(loop_CopyMemoryBy256BytesBlock); // If X is not zero, repeat the loop
-        return asm;
 
+        asm.EndFunction();
+        return asm;
     }
 
     /// <summary>
@@ -137,13 +148,15 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the stack and the A register.
     /// </remarks>
-    public static C64Assembler PushAllRegisters(this C64Assembler asm)
+    public static C64Assembler PushAllRegisters(this C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
         => asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .PHA() // Push accumulator
             .TXA() // Transfer X to A
             .PHA() // Push X
             .TYA() // Transfer Y to A
-            .PHA(); // Push Y
+            .PHA() // Push Y
+            .EndFunction();
 
     /// <summary>
     /// Pops all general-purpose registers (A, X, Y) from the stack in reverse order.
@@ -153,21 +166,25 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// Modifies the stack, the A register, the X register, and the Y register.
     /// </remarks>
-    public static C64Assembler PopAllRegisters(this C64Assembler asm)
+    public static C64Assembler PopAllRegisters(this C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
         => asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .PLA() // Pull Y
             .TAY() // Transfer A to Y
             .PLA() // Pull X
             .TAX() // Transfer A to X
-            .PLA(); // Pull accumulator
+            .PLA() // Pull accumulator
+            .EndFunction();
 
-    public static C64Assembler StoreLabelAtAddress(this C64Assembler asm, Mos6502Label label, ushort address)
+    public static C64Assembler StoreLabelAtAddress(this C64Assembler asm, Mos6502Label label, ushort address, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         return asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LDA_Imm(label.LowByte()) // Load the low byte of the address
             .STA(address) // Store it at the specified address
             .LDA_Imm(label.HighByte()) // Load the high byte of the address
-            .STA((ushort)(address + 1)); // Store it at the next address
+            .STA((ushort)(address + 1)) // Store it at the next address
+            .EndFunction();
     }
 
     /// <summary>
@@ -175,10 +192,12 @@ public static class C64AssemblerExtensions
     /// </summary>
     /// <param name="asm">The assembler instance.</param>
     /// <returns>The assembler instance for chaining.</returns>
-    public static C64Assembler InfiniteLoop(this C64Assembler asm)
+    public static C64Assembler InfiniteLoop(this C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
         => asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .Label(out var infinite)
-            .JMP(infinite);
+            .JMP(infinite)
+            .EndFunction();
 
     /// <summary>
     /// This method installs a raster IRQ handler on the C64 by setting up the VIC-II registers
@@ -190,9 +209,10 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// <para>Modifies the A register</para>
     /// </remarks>
-    public static C64Assembler SetupRasterIrq(this C64Assembler asm, Mos6502Label rasterHandler, byte rasterLine = 0)
+    public static C64Assembler SetupRasterIrq(this C64Assembler asm, Mos6502Label rasterHandler, byte rasterLine = 0, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         return asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LDA_Imm(rasterLine) // Load 0 into the A register
             .STA(VIC2_RASTER)
 
@@ -203,7 +223,8 @@ public static class C64AssemblerExtensions
             .STA(VIC2_CONTROL1)
 
             .LDA_Imm(VIC2InterruptEnableFlags.Raster) // Enable VIC raster IRQ only
-            .STA(VIC2_INTERRUPT_ENABLE); // Store it in the VIC-II interrupt enable register
+            .STA(VIC2_INTERRUPT_ENABLE) // Store it in the VIC-II interrupt enable register
+            .EndFunction();
     }
 
     /// <summary>
@@ -216,11 +237,12 @@ public static class C64AssemblerExtensions
     /// <para>Inspired by <a href="https://codebase64.pokefinder.org/doku.php?id=base:nmi_lock">codebase64 / nmi_lock</a></para>
     /// <para>Modifies the A register</para>
     /// </remarks>
-    public static C64Assembler DisableNmi(this C64Assembler asm)
+    public static C64Assembler DisableNmi(this C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         // From https://codebase64.pokefinder.org/doku.php?id=base:nmi_lock
         // By Wolfram Sang (Ninja/The Dreams)
         asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LabelForward(out var nmiHandler)
             .StoreLabelAtAddress(nmiHandler, NMI_VECTOR) // Store the NMI handler address at the NMI vector
 
@@ -244,6 +266,7 @@ public static class C64AssemblerExtensions
             .RTI();
 
         asm.Label(skipNmi);
+        asm.EndFunction();
         return asm;
     }
 
@@ -255,7 +278,7 @@ public static class C64AssemblerExtensions
     /// <remarks>
     /// This code must be set between a pair of SEI/CLI instructions to avoid interrupts during the timing-sensitive operation.
     /// </remarks>
-    public static C64Assembler SetupTimeOfDayAndGetVerticalFrequency(this C64Assembler asm)
+    public static C64Assembler SetupTimeOfDayAndGetVerticalFrequency(this C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         // From https://codebase64.pokefinder.org/doku.php?id=cia:efficient_tod_initialisation
         // Credits to Silver Dream ! / Thorgal / W.F.M.H.
@@ -268,6 +291,7 @@ public static class C64AssemblerExtensions
         const ushort TOD_50_MID = (TOD_50_HI + TOD_50_LO) >> 1; // Middle point for 50Hz
 
         asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .LabelForward(out var endSetupTimeOfDayAndGetVerticalFrequency) // Label at the end to return to
             .LDA_Imm(0)
             .STA(CIA2_TIME_OF_DAY_10THS);
@@ -320,12 +344,11 @@ public static class C64AssemblerExtensions
             .LDA_Imm(1); // b0 : Vertical 50Hz (PAL)
 
         asm.Label(endSetupTimeOfDayAndGetVerticalFrequency);
+        asm.EndFunction();
 
         return asm;
     }
-
-
-    public static C64Assembler CopyMemory(this C64Assembler asm, Mos6502ExpressionU16 src, Mos6502ExpressionU16 dst, ushort length)
+    public static C64Assembler CopyMemory(this C64Assembler asm, Mos6502ExpressionU16 src, Mos6502ExpressionU16 dst, ushort length, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         if (length == 0) return asm;
         
@@ -333,6 +356,7 @@ public static class C64AssemblerExtensions
         var remaining = (byte)(length % 256);
 
         // Copy per 256 bytes and then byte per byte
+        asm.BeginFunction(debugFilePath, debugLineNumber);
         asm.LDX_Imm(numberOf256Blocks == 0 ? (byte)(remaining + 1) : (byte)0);
 
         if (numberOf256Blocks > 0)
@@ -390,6 +414,7 @@ public static class C64AssemblerExtensions
             }
         }
 
+        asm.EndFunction();
         return asm;
     }
 }

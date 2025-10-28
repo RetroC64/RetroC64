@@ -44,5 +44,5 @@ public abstract class C64AppContext
     /// <summary>
     /// Gets the logger for the RetroC64 pipeline.
     /// </summary>
-    public ILogger Log { get; }
+    public ILogger Log { get; protected set; }
 }

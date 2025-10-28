@@ -19,7 +19,7 @@ public class C64NETConf2025 : C64AppAsmProgram
         context.Settings.EnableViceMonitorLogging = false;
         context.Settings.EnableViceMonitorVerboseLogging = false;
     }
-    
+
     protected override Mos6502Label Build(C64AppBuildContext context, C64Assembler asm)
     {
         // Select which showcase of the demo to build
@@ -28,7 +28,7 @@ public class C64NETConf2025 : C64AppAsmProgram
         // Force the screen buffer at $1000 as it is by default the Character ROM area by default
         // When the music is included, it will be located at $1000
         Mos6502Label screenBuffer = part != DemoPart.Case3_Full ? new Mos6502Label(nameof(screenBuffer), 0x1000) : new Mos6502Label(nameof(screenBuffer));
-        
+
         asm
             .LabelForward(out var screenBufferOffset)
             .LabelForward(out var spriteSinXTable)
@@ -85,7 +85,7 @@ public class C64NETConf2025 : C64AppAsmProgram
         //
         // -------------------------------------------------------------------------
         asm.Label(out var startOfCode);
-        asm.BeginCodeSection("Initialization");
+        asm.BeginCodeSection(Name);
 
         BeginAsmInit(asm);
 
@@ -93,7 +93,9 @@ public class C64NETConf2025 : C64AppAsmProgram
         {
             asm.ClearMemoryBy256BytesBlock(SCREEN_CHARACTER_ADDRESS_DEFAULT, 4, 0); // use 32 for spaces
             EndAsmInitAndInfiniteLoop(asm);
+
             asm.EndCodeSection();
+
             return startOfCode;
         }
 
@@ -101,6 +103,7 @@ public class C64NETConf2025 : C64AppAsmProgram
         {
             asm.CopyMemoryBy256BytesBlock(screenBuffer, SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
             EndAsmInitAndInfiniteLoop(asm);
+
             asm.EndCodeSection();
 
             asm
@@ -122,7 +125,7 @@ public class C64NETConf2025 : C64AppAsmProgram
         }
 
         // Sprite Address / 64 relative to the start of bank 0 ($0000)
-        var spriteAddr64 = (spriteBuffer / 64).LowByte();
+        var spriteAddr64 = (spriteBuffer  / 64).LowByte();
         asm.LDA_Imm(spriteAddr64);
         for (int i = 0; i < 8; i++)
             asm.STA((ushort)(SPRITE0_ADDRESS_DEFAULT + i));
@@ -159,14 +162,13 @@ public class C64NETConf2025 : C64AppAsmProgram
 
         asm.LDA_Imm(bottomScreenLineDefault)
             .STA(zpSpriteSinIndex);
-            
+
         if (part == DemoPart.Case2_LogoAndSprites)
         {
             asm.LabelForward(out var irqSpriteScene)
                 .SetupRasterIrq(irqSpriteScene, 0xF8);
 
             EndAsmInitAndInfiniteLoop(asm);
-            asm.EndCodeSection();
 
             asm
                 .BeginCodeSection("IrqSpriteScene")
@@ -188,12 +190,11 @@ public class C64NETConf2025 : C64AppAsmProgram
         else if (part == DemoPart.Case3_Full)
         {
             asm
-                .BeginCodeSection("FullScene")
                 .SetupRasterIrq(irqScene1, 0xF8)
 
                 .LDA_Imm(charPerIrqStartDefault)
                 .STA(zpCharPerFrame)
-                
+
                 .LDA_Imm(bottomScreenLineDefault)
                 .STA(zpStartingIrqLine)
                 .STA(zpIrqLine) // First IRQ line
@@ -203,9 +204,11 @@ public class C64NETConf2025 : C64AppAsmProgram
 
             // Initialize SID music
             sidPlayer!.Initialize();
-            
+
             // Enter infinite loop
             EndAsmInitAndInfiniteLoop(asm);
+
+            asm.BeginCodeSection("FullScene");
 
             // -------------------------------------------------------------------------
             //
@@ -474,6 +477,8 @@ public class C64NETConf2025 : C64AppAsmProgram
             .RTS()
             .EndCodeSection();
 
+        asm.EndCodeSection(); // Englobe all code sections into a single block
+        
         // -------------------------------------------------------------------------
         //
         // Buffers

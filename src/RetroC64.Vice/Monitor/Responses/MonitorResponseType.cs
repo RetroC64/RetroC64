@@ -18,6 +18,18 @@ public enum MonitorResponseType : byte
     /// </summary>
     CheckpointInfo = 0x11,
     /// <summary>
+    /// Represents an operation code for deleting a checkpoint.
+    /// </summary>
+    CheckpointDelete = 0x13,
+    /// <summary>
+    /// Represents a value indicating a list of checkpoints.
+    /// </summary>
+    CheckpointList = 0x14,
+    /// <summary>
+    /// Represents a command or signal to toggle the state of a checkpoint.
+    /// </summary>
+    CheckpointToggle = 0x15,
+    /// <summary>
     /// Response containing register values.
     /// </summary>
     RegisterInfo = 0x31,

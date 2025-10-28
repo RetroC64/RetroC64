@@ -6,6 +6,7 @@ using Asm6502;
 using RetroC64.Basic;
 using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
+using System.Runtime.CompilerServices;
 
 namespace RetroC64.App;
 
@@ -34,14 +35,14 @@ public abstract class C64AppAsmProgram : C64AppElement
         asm.Org(startAsm, Name);
         var startLabel = Build(context, asm);
 
-        var labels = new HashSet<IMos6502Label>();
+        var labels = new HashSet<Mos6502Label>();
         asm.CollectLabels(labels);
 
         // Add labels in the order they were declared
-        debugMap.Labels.AddRange(labels.OrderBy(x => x is Mos6502Label label ? label.Address : ((Mos6502LabelZp)x).Address));
-
+        debugMap.Labels.AddRange(labels);
         asm.End();
-
+        debugMap.ZpLabels.AddRange(asm.Zp.GetAllocatedAddresses());
+        
         if (!startLabel.IsBound)
         {
             throw new InvalidOperationException($"The start label `{startLabel}` for the program is not bound");
@@ -61,28 +62,26 @@ public abstract class C64AppAsmProgram : C64AppElement
         var asmBuffer = asm.Buffer.ToArray();
 
         // Add support for a live reload action
-        context.SetLiveReloadAction(async vice =>
+        context.SetLiveReloadAction(vice =>
             {
-                await C64MachineHelper.SoftReset(context, vice);
+                C64MachineHelper.SoftReset(vice);
 
-                await vice.SendCommandAsync(new MemorySetCommand()
+                vice.SetMemory(new MemorySetCommand()
                 {
                     BankId = new(1),
                     Data = asmBuffer,
-                    Memspace = MemSpace.MainMemory,
+                    Memspace = MemSpace.Default,
                     StartAddress = startAsm,
                 });
 
-                await vice.SendCommandAsync(new RegistersSetCommand()
-                {
-                    Items =
-                    [
-                        new RegisterValue(RegisterId.FLAGS, 0),
-                        new RegisterValue(RegisterId.PC, startAsm)
-                    ]
-                });
+                vice.SetRegisters([
+                    new RegisterValue(RegisterId.FLAGS, 0),
+                    new RegisterValue(RegisterId.PC, startAsm)
+                ]);
 
-                await vice.SendCommandAsync(new ExitCommand());
+                vice.Exit();
+
+                return Task.CompletedTask;
             }
         );
     }
@@ -100,15 +99,19 @@ public abstract class C64AppAsmProgram : C64AppElement
     /// </summary>
     /// <param name="asm">Assembler.</param>
     /// <returns>The same assembler to allow fluent usage.</returns>
-    protected C64Assembler BeginAsmInit(C64Assembler asm)
+    protected C64Assembler BeginAsmInit(C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
-        asm.SEI()
+        asm
+            .BeginCodeSection("Init")
+            .BeginFunction(debugFilePath, debugLineNumber)
+            .SEI()
             .SetupTimeOfDayAndGetVerticalFrequency()
             .STA(0x02A6) // Store back NTSC(0)/PAL(1) flag to 0x02A6
             .DisableAllIrq()
             .SetupStack()
             .SetupRamAccess()
-            .DisableNmi();
+            .DisableNmi()
+            .EndFunction();
         return asm;
     }
 
@@ -117,10 +120,13 @@ public abstract class C64AppAsmProgram : C64AppElement
     /// </summary>
     /// <param name="asm">Assembler.</param>
     /// <returns>The same assembler.</returns>
-    protected C64Assembler EndAsmInitAndInfiniteLoop(C64Assembler asm)
+    protected C64Assembler EndAsmInitAndInfiniteLoop(C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         return asm
+            .BeginFunction(debugFilePath, debugLineNumber)
             .CLI()
-            .InfiniteLoop();
+            .InfiniteLoop()
+            .EndFunction()
+            .EndCodeSection();
     }
 }

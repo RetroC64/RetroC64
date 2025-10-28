@@ -14,7 +14,7 @@ public class RegistersAvailableCommand() : MonitorCommand(MonitorCommandType.Reg
     /// <summary>
     /// Gets or sets the memory space.
     /// </summary>
-    public MemSpace Memspace { get; set; } = MemSpace.MainMemory;
+    public MemSpace Memspace { get; set; }
 
     public override int BodyLength => sizeof(byte);
 

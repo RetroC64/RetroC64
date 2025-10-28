@@ -26,87 +26,79 @@ public class ViceMonitorTests
 
         // RegistersAvailableCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new RegistersAvailableCommand());
-            Assert.IsTrue(response is RegistersAvailableResponse);
-
-            var registerResponse = (RegistersAvailableResponse)response;
-            Assert.IsGreaterThan(9, registerResponse.Registers.Length, "No registers found");
-            Assert.IsTrue(registerResponse.Registers.Any(r => r.Name == "A"), "No A register found");
-            Console.WriteLine(response);
+            var registers = runner.Monitor.GetRegisters();
+            Assert.IsGreaterThan(9, registers.Length, "No registers found");
+            Assert.IsTrue(registers.Any(r => r.RegisterId == RegisterId.A), "No A register found");
+            Console.WriteLine($"{string.Join(", ", registers)}");
         }
 
         // ResourceGetCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new ResourceGetCommand() { ResourceName = "KernalName" });
-            Assert.IsTrue(response is ResourceGetResponse);
-            var resourceResponse = (ResourceGetResponse)response;
-            Assert.AreEqual("kernal-901227-03.bin", resourceResponse.ResourceValue.AsString, "Resource name mismatch");
-            Console.WriteLine(response);
+            var resourceValue = runner.Monitor.GetResource("KernalName");
+            Assert.AreEqual("kernal-901227-03.bin", resourceValue.AsString, "Resource name mismatch");
+            Console.WriteLine(resourceValue);
         }
 
         // DisplayGetCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new DisplayGetCommand());
-            Assert.IsTrue(response is DisplayGetResponse);
-            var displayResponse = (DisplayGetResponse)response;
+            var displayResponse = runner.Monitor.GetDisplay();
             Assert.IsGreaterThan(0, displayResponse.Width, "Display width is zero");
             Assert.IsGreaterThan(0, displayResponse.Height, "Display height is zero");
-            Console.WriteLine(response);
+            Console.WriteLine(displayResponse);
         }
 
         // PingCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new PingCommand());
-            Assert.IsTrue(response is GenericResponse);
-            Console.WriteLine(response);
+            runner.Monitor.Ping();
         }
 
         // PaletteGetCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new PaletteGetCommand());
-            Assert.IsTrue(response is PaletteGetResponse);
-            var paletteResponse = (PaletteGetResponse)response;
-            Assert.HasCount(16, paletteResponse.Palette, "Palette does not contain 16 colors");
-            Console.WriteLine(response);
+            var palette = runner.Monitor.GetPalette();
+            Assert.HasCount(16, palette, "Palette does not contain 16 colors");
+            Console.WriteLine(string.Join(", ", palette));
         }
 
         // ViceInfoCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new ViceInfoCommand());
-            Assert.IsTrue(response is ViceInfoResponse);
-            var viceInfoResponse = (ViceInfoResponse)response;
+            var viceInfoResponse = runner.Monitor.GetViceInfo();
             Assert.IsTrue(viceInfoResponse.Version >= new Version(3, 9) , $"Version {viceInfoResponse.Version} must be >= 3.9");
-            Console.WriteLine(response);
+            Console.WriteLine(viceInfoResponse);
         }
 
         // BanksAvailableCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new BanksAvailableCommand());
-            Assert.IsTrue(response is BanksAvailableResponse);
-            var banksResponse = (BanksAvailableResponse)response;
-            Assert.IsNotEmpty(banksResponse.Banks, "No banks found");
-            Console.WriteLine(response);
+            var banks = runner.Monitor.GetBanksAvailable();
+            Assert.IsNotEmpty(banks, "No banks found");
+            Console.WriteLine(string.Join(", ", banks));
         }
 
         // MemorySetCommand
         {
-            var setResponse = await runner.Monitor.SendCommandAsync(new MemorySetCommand() { StartAddress = 0xC000, BankId = new BankId(0), Memspace = MemSpace.MainMemory, Data = new byte[] { 0x34, 0x12 } });
-            Assert.IsTrue(setResponse is GenericResponse);
-            Console.WriteLine(setResponse);
+            runner.Monitor.SetMemory(
+                new MemorySetCommand()
+                {
+                    StartAddress = 0xC000,
+                    BankId = new BankId(0),
+                    Data = new byte[] { 0x34, 0x12 }
+                });
         }
 
         // MemoryGetCommand
         {
-            var response = await runner.Monitor.SendCommandAsync(new MemoryGetCommand() { StartAddress = 0xC000, EndAddress = 0xC001, BankId = new BankId(0), Memspace = MemSpace.MainMemory});
-            Assert.IsTrue(response is GenericResponse);
-            var memoryResponse = (GenericResponse)response;
-            Assert.HasCount(4, memoryResponse.Body, "Memory length mismatch ");
+            var buffer = runner.Monitor.GetMemory(
+                new MemoryGetCommand()
+                {
+                    StartAddress = 0xC000,
+                    EndAddress = 0xC001,
+                    BankId = new BankId(0),
+                });
+            Assert.HasCount(2, buffer, "Memory length mismatch ");
 
-            var span = MemoryMarshal.Cast<byte, ushort>(memoryResponse.Body.AsSpan());
-            Assert.AreEqual(2, span[0], "Must be length of 2");
-            Assert.AreEqual(0x1234, span[1], "Read memory mismatch");
-            
-            Console.WriteLine(response);
+            var span = MemoryMarshal.Cast<byte, ushort>(buffer);
+            Assert.AreEqual(0x1234, span[0], "Read memory mismatch");
+
+            Console.WriteLine(string.Join(", ", buffer.Select(x => $"${x:x2}")));
         }
         
         await runner.Shutdown();

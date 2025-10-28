@@ -45,4 +45,9 @@ public class C64AppBuilderSettings
     /// Gets or sets the file service used to persist generated artifacts (e.g., PRG/D64) to disk.
     /// </summary>
     public IC64FileService FileService { get; set; } = new C64LocalFileService();
+
+    /// <summary>
+    /// Gets or sets the port number used for the Debug Adapter Protocol connection.
+    /// </summary>
+    public int DebugAdapterProtocolPort { get; set; } = 6503;
 }

@@ -26,6 +26,11 @@ public abstract class MonitorResponse(MonitorResponseType responseType)
     /// </summary>
     public MonitorRequestId RequestId { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the monitor response contains an error.
+    /// </summary>
+    public bool HasError => Error != MonitorErrorKind.None || ResponseType == MonitorResponseType.Invalid;
+
     public override string ToString()
     {
         var builder = new StringBuilder();
@@ -50,6 +55,7 @@ public abstract class MonitorResponse(MonitorResponseType responseType)
         MonitorResponse response = responseType switch
         {
             MonitorResponseType.CheckpointInfo => new CheckpointResponse(),
+            MonitorResponseType.CheckpointList => new CheckpointListResponse(),
             MonitorResponseType.RegisterInfo => new RegisterResponse(),
             MonitorResponseType.Jam => new JamResponse(),
             MonitorResponseType.Stopped => new StoppedResponse(),

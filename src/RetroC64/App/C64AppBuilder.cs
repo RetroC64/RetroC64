@@ -22,8 +22,8 @@ namespace RetroC64.App;
 public class C64AppBuilder : IC64FileContainer
 {
     private bool _commandLinePrepared;
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly List<(string FileName, Mos6502AssemblerDebugMap? DebugMap)> _buildGeneratedFilesForVice = new();
+    private readonly ILoggerFactory _logFactory;
+    private readonly List<(string FileName, C64AssemblerDebugMap? DebugMap)> _buildGeneratedFilesForVice = new();
     private readonly ManualResetEventSlim _hotReloadEvent = new(false);
     private CodeReloadEvent? _codeReloadEvent;
     private readonly CancellationTokenSource _cancellationTokenSource;
@@ -49,7 +49,7 @@ public class C64AppBuilder : IC64FileContainer
         Settings = settings ?? new C64AppBuilderSettings();
         CommandLine = new(this);
 
-        _loggerFactory = LoggerFactory.Create(configure =>
+        _logFactory = LoggerFactory.Create(configure =>
             {
                 var ansiConsoleSettings = IsDotNetWatch
                     ? new AnsiConsoleSettings()
@@ -78,13 +78,17 @@ public class C64AppBuilder : IC64FileContainer
                         AnsiConsole.Console = console;
                     }
                 });
+
+                // Change the log level
+                configure.SetMinimumLevel(Settings.LogLevel);
             }
         );
 
         C64HotReloadService.UpdateApplicationEvent += HotReloadServiceOnUpdateApplicationEvent;
 
         var rootElement = factory();
-        Log = _loggerFactory.CreateLogger($"[gray]RetroC64[/]-{rootElement.Name}");
+        Name = rootElement.Name;
+        Log = _logFactory.CreateLogger($"[gray]RetroC64[/]-{Name}");
     }
 
     /// <summary>
@@ -95,12 +99,22 @@ public class C64AppBuilder : IC64FileContainer
     /// <summary>
     /// Gets the command-line host exposing build and live commands.
     /// </summary>
-    public C64CommandLine CommandLine { get; } 
+    public C64CommandLine CommandLine { get; }
 
+    /// <summary>
+    /// Gets the name of the app being built.
+    /// </summary>
+    public string Name { get; }
+    
     /// <summary>
     /// Gets the logger instance used by the builder.
     /// </summary>
     public ILogger Log { get; }
+
+    /// <summary>
+    /// Gets the factory used to create logger instances for logging application events and diagnostics.
+    /// </summary>
+    public ILoggerFactory LogFactory => _logFactory;
 
     /// <summary>
     /// Gets the file service used to persist generated artifacts (e.g., PRG/D64) to disk.
@@ -167,16 +181,14 @@ public class C64AppBuilder : IC64FileContainer
 
         // We start to initialize the app elements (to allow to configure global settings like vice monitor)
         TryInitializeAppElements();
-
-
-
+        
         Log.LogInformationMarkup("👾 Launching VICE Emulator");
         Console.CancelKeyPress += OnConsoleOnCancelKeyPress;
 
         var monitor = new ViceMonitor();
 
         // Starts the debugger
-        var debuggerServer = new C64DebuggerServer(this, monitor);
+        using var debuggerServer = new C64AppDebuggerServerFactory(this, monitor, _cancellationTokenSource.Token);
         debuggerServer.Start();
         
         var runner = new ViceRunner()
@@ -269,7 +281,8 @@ public class C64AppBuilder : IC64FileContainer
 
                         if (!_isLiveFileAutoStarted || _customCodeReloadAction is null)
                         {
-                            monitor.SendCommand(new AutostartCommand()
+                            Log.LogInformation("Send restart");
+                            monitor.Autostart(new AutostartCommand()
                             {
                                 Filename = fileToLaunch.FileName,
                                 RunAfterLoading = true
@@ -353,7 +366,7 @@ public class C64AppBuilder : IC64FileContainer
             services.AddSingleton(this);
             services.AddSingleton<IC64CacheService, C64CacheService>();
             services.AddSingleton<IC64SidService, C64SidService>();
-            services.AddSingleton<ILoggerFactory>(_loggerFactory);
+            services.AddSingleton<ILoggerFactory>(_logFactory);
 
             // TODO: Allow to plug services from AppElements and settings
 
@@ -406,6 +419,7 @@ public class C64AppBuilder : IC64FileContainer
     /// </summary>
     public static async Task<int> Run(Func<C64AppElement> factory, string[] args, C64AppBuilderSettings? settings = null)
     {
+        Console.OutputEncoding = Encoding.UTF8;
         var appBuilder = new C64AppBuilder(factory, settings);
         return await appBuilder.Run(args);
     }

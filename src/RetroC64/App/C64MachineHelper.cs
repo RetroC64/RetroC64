@@ -16,18 +16,16 @@ internal static class C64MachineHelper
     /// <summary>
     /// Performs a soft reset of key RAM regions and device registers via the VICE monitor.
     /// </summary>
-    /// <param name="context">Current app context (used for logging).</param>
     /// <param name="monitor">Connected VICE monitor.</param>
-    public static async Task SoftReset(C64AppContext context, ViceMonitor monitor)
+    public static void SoftReset(ViceMonitor monitor)
     {
-        var banks = (BanksAvailableResponse)await monitor.SendCommandAsync(new BanksAvailableCommand());
-        var ramBank = banks.Banks.FirstOrDefault(x => x.Name == "cpu").BankId;
+        var banks = monitor.GetBanksAvailable();
+        var ramBank = banks.FirstOrDefault(x => x.Name == "cpu").BankId;
 
         // Character Buffer
-        await monitor.SendCommandAsync(new MemorySetCommand()
+        monitor.SetMemory(new MemorySetCommand()
         {
             BankId = ramBank,
-            Memspace = MemSpace.MainMemory,
             StartAddress = 0x400,
             Data = DefaultCharacterBuffer,
         });
@@ -38,28 +36,25 @@ internal static class C64MachineHelper
             DefaultColorBuffer.AsSpan().Fill(0x0e);
         }
 
-        await monitor.SendCommandAsync(new MemorySetCommand()
+        monitor.SetMemory(new MemorySetCommand()
         {
             BankId = ramBank,
-            Memspace = MemSpace.MainMemory,
             StartAddress = 0xd800,
             Data = DefaultColorBuffer,
         });
 
         // VIC Registers
-        await monitor.SendCommandAsync(new MemorySetCommand()
+        monitor.SetMemory(new MemorySetCommand()
         {
             BankId = ramBank,
-            Memspace = MemSpace.MainMemory,
             StartAddress = 0xd000,
             Data = DefaultVIC2Registers,
         });
         
         // SID Registers
-        await monitor.SendCommandAsync(new MemorySetCommand()
+        monitor.SetMemory(new MemorySetCommand()
         {
             BankId = ramBank,
-            Memspace = MemSpace.MainMemory,
             StartAddress = 0xd400,
             Data = SidRegisters,
         });

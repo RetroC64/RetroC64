@@ -10,23 +10,31 @@ namespace RetroC64.Vice.Monitor;
 public enum MemSpace : byte
 {
     /// <summary>
-    /// Main memory of the emulator.
+    /// Default space (equal to <see cref="Computer"/>).
     /// </summary>
-    MainMemory = 0,
+    Default = 0,
+    /// <summary>
+    /// Main memory of the computer.
+    /// </summary>
+    Computer,
     /// <summary>
     /// Memory of drive 8.
     /// </summary>
-    Drive8 = 1,
+    Drive8,
     /// <summary>
     /// Memory of drive 9.
     /// </summary>
-    Drive9 = 2,
+    Drive9,
     /// <summary>
     /// Memory of drive 10.
     /// </summary>
-    Drive10 = 3,
+    Drive10,
     /// <summary>
     /// Memory of drive 11.
     /// </summary>
-    Drive11 = 4,
+    Drive11,
+    /// <summary>
+    /// Represents an invalid space.
+    /// </summary>
+    Invalid
 }

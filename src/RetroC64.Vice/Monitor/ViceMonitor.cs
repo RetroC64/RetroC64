@@ -19,7 +19,7 @@ namespace RetroC64.Vice.Monitor;
 /// <summary>
 /// Provides an interface to communicate with the VICE emulator monitor via TCP.
 /// </summary>
-public sealed class ViceMonitor : IDisposable
+public sealed partial class ViceMonitor : IDisposable
 {
     private const byte STX = 0x02;
     private const byte API_VERSION = 0x02;
@@ -48,6 +48,21 @@ public sealed class ViceMonitor : IDisposable
     /// Gets or sets the endpoint for the binary monitor.
     /// </summary>
     public IPEndPoint BinaryMonitorEndPoint { get; set; } = new(IPAddress.Loopback, DefaultPort);
+
+    /// <summary>
+    /// Occurs when a breakpoint is hit during execution.
+    /// </summary>
+    public event Action<CheckpointResponse>? BreakpointHit;
+
+    /// <summary>
+    /// Occurs when the emulator resumes after being paused or suspended.
+    /// </summary>
+    public event Action? Resumed;
+
+    /// <summary>
+    /// Occurs when the emulator has stopped.
+    /// </summary>
+    public event Action? Stopped;
 
     /// <summary>
     /// Connects to the VICE monitor server.
@@ -154,22 +169,94 @@ public sealed class ViceMonitor : IDisposable
         SendCommand(command, null);
     }
 
-    public TResponse SendCommandAndGetResponse<TResponse>(MonitorCommand command)
+    public void SendCommandAndGetOkResponse(MonitorCommand command, CancellationToken cancellationToken = default)
     {
         SendCommand(command, null);
         while (true)
         {
-            if (_responseQueue.TryDequeue(out var response))
+            if (_responseQueue.TryDequeue(out var response) && response.RequestId.Value == command.RequestId)
             {
-                if (response.RequestId.Value == command.RequestId && response is TResponse typedResponse)
+                if (response.HasError)
+                {
+                    throw new ViceMonitorException($"Command {command.CommandType} resulted in an error: {response.Error}")
+                    {
+                        ErrorKind = response.Error,
+                        OriginatedCommand = command
+                    };
+                }
+                break;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            Thread.Sleep(1);
+        }
+    }
+
+    public TResponse SendCommandAndGetResponse<TResponse>(MonitorCommand command, CancellationToken cancellationToken = default)
+    {
+        SendCommand(command, null);
+        while (true)
+        {
+            if (_responseQueue.TryDequeue(out var response) && response.RequestId.Value == command.RequestId)
+            {
+                if (response is TResponse typedResponse)
                 {
                     return typedResponse;
                 }
-            }
-            Thread.Sleep(1);
 
-            // TODO: Add timeout?
+                if (response.HasError)
+                {
+                    throw new ViceMonitorException($"Command {command.CommandType} resulted in an error: {response.Error}")
+                    {
+                        ErrorKind = response.Error,
+                        OriginatedCommand = command
+                    };
+                }
+
+                throw new ViceMonitorException($"Command {command.CommandType} resulted in an unexpected response type. Expected {typeof(TResponse)}, but got {response.GetType()}.")
+                {
+                    ErrorKind = MonitorErrorKind.None,
+                    OriginatedCommand = command
+                };
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            Thread.Sleep(1);
         }
+    }
+
+    public List<MonitorResponse> SendCommandAndGetAllResponses<TLastResponse>(MonitorCommand command, CancellationToken cancellationToken = default)
+    {
+        SendCommand(command, null);
+        var responses = new List<MonitorResponse>();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_responseQueue.TryDequeue(out var response) && response.RequestId.Value == command.RequestId)
+            {
+                responses.Add(response);
+                if (response is TLastResponse)
+                {
+                    break;
+                }
+
+                if (response.HasError)
+                {
+                    throw new ViceMonitorException($"Command {command.CommandType} resulted in an error: {response.Error}")
+                    {
+                        ErrorKind = response.Error,
+                        OriginatedCommand = command
+                    };
+                }
+            }
+            else
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Thread.Sleep(1);
+            }
+        }
+
+        return responses;
     }
 
     /// <summary>
@@ -292,14 +379,43 @@ public sealed class ViceMonitor : IDisposable
                     if (responseType == MonitorResponseType.Stopped)
                     {
                         State = EmulatorState.Paused;
+                        try
+                        {
+                            Stopped?.Invoke();
+                        }
+                        catch
+                        {
+                            // Ignore exceptions from event handlers
+                        }
                     }
                     else if (responseType == MonitorResponseType.Resumed)
                     {
                         State = EmulatorState.Running;
+                        try
+                        {
+                            Resumed?.Invoke();
+                        }
+                        catch
+                        {
+                            // Ignore exceptions from event handlers
+                        }
+                    }
+                }
+                
+                var response = MonitorResponse.Create(responseType, error, requestId, body != null ? new ReadOnlySpan<byte>(body, 0, bodyBytes) : ReadOnlySpan<byte>.Empty);
+
+                if (State == EmulatorState.Running && responseType == MonitorResponseType.CheckpointInfo)
+                {
+                    try
+                    {
+                        BreakpointHit?.Invoke((CheckpointResponse)response);
+                    }
+                    catch
+                    {
+                        // Ignore exceptions from event handlers
                     }
                 }
 
-                var response = MonitorResponse.Create(responseType, error, requestId, body != null ? new ReadOnlySpan<byte>(body, 0, bodyBytes) : ReadOnlySpan<byte>.Empty);
                 if (!requestId.IsEvent && _pending.TryRemove(requestId, out var tcs))
                 {
                     tcs.TrySetResult(response);
@@ -326,4 +442,22 @@ public sealed class ViceMonitor : IDisposable
             _running = false;
         }
     }
+}
+
+
+public class ViceMonitorException : Exception
+{
+    public ViceMonitorException()
+    {
+    }
+    public ViceMonitorException(string message) : base(message)
+    {
+    }
+    public ViceMonitorException(string message, Exception innerException) : base(message, innerException)
+    {
+    }
+
+    public required MonitorErrorKind ErrorKind { get; init; }
+
+    public required MonitorCommand OriginatedCommand { get; init; }
 }
