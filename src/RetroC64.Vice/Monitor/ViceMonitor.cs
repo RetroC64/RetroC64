@@ -169,8 +169,19 @@ public sealed partial class ViceMonitor : IDisposable
         SendCommand(command, null);
     }
 
+    /// <summary>
+    /// Sends the specified monitor command and waits for an 'OK' response or throws an exception if an error response
+    /// is received.
+    /// </summary>
+    /// <remarks>This method blocks until a response is received for the specified command or the operation is
+    /// canceled. If the response indicates an error, a ViceMonitorException is thrown containing details about the
+    /// error and the originating command.</remarks>
+    /// <param name="command">The monitor command to send. Must not be null.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation before completion.</param>
+    /// <exception cref="ViceMonitorException">Thrown if the command results in an error response from the monitor.</exception>
     public void SendCommandAndGetOkResponse(MonitorCommand command, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         SendCommand(command, null);
         while (true)
         {
@@ -192,8 +203,21 @@ public sealed partial class ViceMonitor : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends the specified monitor command and waits for a response of the expected type.
+    /// </summary>
+    /// <remarks>This method blocks until a response with a matching RequestId is received or the operation is
+    /// canceled. If the response contains an error, a <see cref="ViceMonitorException"/> is thrown with details about
+    /// the error.</remarks>
+    /// <typeparam name="TResponse">The type of the response expected from the command. Must match the actual response type returned by the monitor.</typeparam>
+    /// <param name="command">The monitor command to send. The command's RequestId is used to match the corresponding response.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the wait for a response.</param>
+    /// <returns>The response to the command, cast to the specified type parameter <typeparamref name="TResponse"/>.</returns>
+    /// <exception cref="ViceMonitorException">Thrown if the response indicates an error or if the response type does not match <typeparamref
+    /// name="TResponse"/>.</exception>
     public TResponse SendCommandAndGetResponse<TResponse>(MonitorCommand command, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         SendCommand(command, null);
         while (true)
         {
@@ -225,8 +249,23 @@ public sealed partial class ViceMonitor : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends the specified monitor command and retrieves all responses associated with it until a response of the
+    /// specified type is received.
+    /// </summary>
+    /// <remarks>The method blocks until a response of type TLastResponse is received or the operation is
+    /// canceled. If the cancellation token is triggered, the operation is aborted and an OperationCanceledException is
+    /// thrown. The returned list contains all responses in the order they were received.</remarks>
+    /// <typeparam name="TLastResponse">The type of the final response that indicates the end of the response sequence. The method continues retrieving
+    /// responses until a response of this type is encountered.</typeparam>
+    /// <param name="command">The monitor command to send. This command determines the set of responses to be collected.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation before completion.</param>
+    /// <returns>A list of all monitor responses received for the specified command, including the final response of type
+    /// TLastResponse.</returns>
+    /// <exception cref="ViceMonitorException">Thrown if any of the received responses indicates an error.</exception>
     public List<MonitorResponse> SendCommandAndGetAllResponses<TLastResponse>(MonitorCommand command, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         SendCommand(command, null);
         var responses = new List<MonitorResponse>();
         while (true)
@@ -301,7 +340,7 @@ public sealed partial class ViceMonitor : IDisposable
         // Problem is that Windows paths contains `:`, so we need to remove them
         if (OperatingSystem.IsWindows() && path.Length > 2 && char.IsAsciiLetter(path[0]) && path[1] == ':')
         {
-            path = path.Substring(2);
+            path = path[2..];
         }
         return path;
     }
