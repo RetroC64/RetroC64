@@ -34,6 +34,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
     private readonly List<C64Breakpoint> _instructionBreakpoints = new();
 
     private readonly C64AssemblerDebugInfoProcessor _debugInfoProcessor;
+    private bool _shuttingDown;
 
     private CheckpointResponse? _breakpointHit;
     
@@ -72,7 +73,10 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
         Protocol.DispatcherError += (sender, args) =>
         {
-            _context.Error($"🐛 C64 Debugger Protocol Dispatcher Error: {args.Exception}");
+            if (!_shuttingDown)
+            {
+                _context.Error($"🐛 C64 Debugger Protocol Dispatcher Error: {args.Exception}");
+            }
         };
 
         //Protocol.LogMessage += (sender, args) =>
@@ -96,6 +100,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
             _context.Info("🐛 C64 Debugger - Client disconnected");
             try
             {
+                _shuttingDown = true;
                 Protocol.Stop();
                 Protocol.WaitForReader();
             }
@@ -142,7 +147,10 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
     protected override void HandleProtocolError(Exception ex)
     {
-        _context.Error($"🐛 C64 Debugger Protocol Error: {ex.Message}");
+        if (ex is not OperationCanceledException && !_shuttingDown)
+        {
+            _context.Error($"🐛 C64 Debugger Protocol Error: {ex.Message}");
+        }
     }
 
     public bool Enabled { get; private set; }
