@@ -4,7 +4,7 @@
 
 namespace RetroC64.Loader;
 
-public partial class Spindle
+internal partial class Spindle
 {
     private static readonly byte[] _scramble_bits = CreateScrambleBits();
 

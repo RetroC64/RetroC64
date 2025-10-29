@@ -2,12 +2,12 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
-// Part of the code in this file is based on code from the original project sidreloc 1.0 by Linus Akesson,
+// Part of the code in this file is based on code from the original project sidreloc 1.0 by Linus Åkesson,
 // which is licensed under the MIT license (see below).
 // The original code has been largely adapted and integrated into RetroC64.
 // https://www.linusakesson.net/software/sidreloc/index.php
 
-/* Copyright (c) 2012 Linus Akesson
+/* Copyright (c) 2012 Linus Åkesson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the

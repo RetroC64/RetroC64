@@ -11,6 +11,12 @@
     <None Remove="sid_test_files\Racing_the_Beam.sid" />
     <None Remove="sid_test_files\Tjaereborg2025.sid" />
     <None Remove="Simple.bas" />
+    <None Remove="spindle_files\drivecode.bin" />
+    <None Remove="spindle_files\eflagwarning.bin" />
+    <None Remove="spindle_files\prgloader.prg" />
+    <None Remove="spindle_files\seek.bin" />
+    <None Remove="spindle_files\silence.bin" />
+    <None Remove="spindle_files\stage1.prg" />
     <None Remove="zx0_test_files\*" />
   </ItemGroup>
 
@@ -25,6 +31,24 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Simple.bas">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="spindle_files\drivecode.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="spindle_files\eflagwarning.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="spindle_files\prgloader.prg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="spindle_files\seek.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="spindle_files\silence.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="spindle_files\stage1.prg">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="zx0_test_files\*">

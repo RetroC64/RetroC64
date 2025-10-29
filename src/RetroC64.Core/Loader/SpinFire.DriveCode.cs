@@ -27,6 +27,7 @@
 
 // ReSharper disable InconsistentNaming
 
+using System.Diagnostics;
 using Asm6502;
 using Asm6502.Expressions;
 using static Asm6502.Mos6502Factory;
@@ -51,38 +52,59 @@ using static C1541Registers;
 /// C# translation of drivecode.s for the 1541, using Mos6510Assembler.
 /// All comments are preserved from the original source.
 /// </summary>
-partial class Spindle
+partial class SpinFire
 {
     // ---------------------- Memory Layout and Constants ----------------------
 
-    // Zero page and memory map
-    public const ushort stashbufs = 0x600;
-    public const ushort gcrdecode = 0x500;
-    public const ushort zonebits = 0x544;
-    public const ushort zonebranch = 0x5bd;
-    public const ushort zonesectors = 0x5c4;
-    public const ushort scramble = 0x51f;
-    public const byte SAFETY_MARGIN = 0x07;
+    // Constants
+
+
+    private const byte SAFETY_MARGIN = 0b111;
+
+    private const byte ini_sector = 12;
+    private const ushort ini_address = 0x600;
+
+    private const byte comm_sector = 17;
+    private const ushort comm_address = 0x200;
+
+    private const byte fch_sector = 11; // Loaded by DOS in initialization
+    private const ushort fch_address = 0x300;
+
+    private const byte misc_sector = 2; // Loaded by DOS in initialization
+    private const ushort misc_address = 0x400;
+
+    private const byte gcr_sector = 3; // Loaded by DOS in initialization
+    private const ushort gcr_address = 0x500;
+    private const ushort gcr_zonebits = gcr_address + 0x44;
+    private const ushort gcr_zonebranch = gcr_address + 0xbd;
+    private const ushort gcr_zonesectors = gcr_address + 0xc4;
+    private const ushort gcr_scramble = gcr_address + 0x1f;
 
     // Zero page variables
-    public const byte ZPORG = 0x60; // $66 bytes
-    public const byte interested = 0xd8; // 21 + 2 bytes
-    public const byte ninterested = 0xef;
-    public const byte req_track = 0xf1;
-    public const byte cur_track = 0xf2;
-    public const byte nextstatus = 0xf3;
-    public const byte safety = 0xf4;
-    public const byte chunkend = 0xf5;
-    public const byte ledmask = 0xf6;
-    public const byte temp = 0xf7;
-    public const byte chunkprefix = 0xf8;
-    public const byte chunklen = 0xf9;
-    public const byte bufptr = 0xfa; // word
-    public const byte nstashed = 0xfc;
-    public const byte tracklength = 0xfd;
+    private const byte ZPORG = 0x60; // $66 bytes
+    private const byte req_track = 0xf0;
+    private const byte req_sector = 0xf1;
+    private const byte cur_track = 0xf2;
+    private const byte safety = 0xf4;
+    private const byte ledmask = 0xf6;
+    private const byte temp = 0xf7;
+
+    // TO REMOVE
+    private const ushort stashbufs = 0x600;
+    private const byte interested = 0xd8; // 21 + 2 bytes
+    private const byte ninterested = 0xef;
+    private const byte nextstatus = 0xf3;
+    private const byte chunkend = 0xf5;
+    private const byte chunkprefix = 0xf8;
+    private const byte chunklen = 0xf9;
+    private const byte bufptr = 0xfa; // word
+    private const byte nstashed = 0xfc;
+    // End TO REMOVE
+
+    private const byte tracklength = 0xfd;
 
     public bool GenerateErrors { get; set; }
-    
+
     public void AssembleDriveCode(Mos6510Assembler asm)
     {
         // Spindle by lft, linusakesson.net/software/spindle/
@@ -90,15 +112,16 @@ partial class Spindle
         // Memory
         //  000 - Zero page; contains also the gcr loop at $60 - .. (TODO calculate exact size)
         //  100 - Stack; used as block buffer
-        //  200 - Code for serial communication
-        //  300 - Code for fetching data from disk
-        //  400 - Miscellaneous code
-        //  500 - GCR decoding tables
+        //  200 - Code for serial communication      Loaded at init via drivecode
+        //  300 - Code for fetching data from disk   Loaded by DOS at init
+        //  400 - Miscellaneous code                 Loaded by DOS at init
+        //  500 - GCR decoding tables                Loaded by DOS at init
         //  600 - Init, then stash buffer 1
         //  700 - Stash buffer 2
 
         // Main entry point at $600
         asm.LabelForward(out var ini_ondemand_entry);
+        asm.LabelForward(out var ini_comm_from_stack);
         asm.LabelForward(out var zpc_entry);
         asm.LabelForward(out var zpc_bne);
         Mos6502ExpressionU16 BNE_WITH_NOP;
@@ -126,27 +149,25 @@ partial class Spindle
         asm.LabelForward(out var fch_drivecode_fetch);
         asm.LabelForward(out var fch_zp_return);
         asm.LabelForward(out var fch_mod_fetchret);
-        
+
         // ****************************************************************************************************************************************
         //
         // Initialization
         //
         // ****************************************************************************************************************************************
         {
-            asm.Org(0x600)
-                // .byt 12 ; sector number
-                .Append(12)
-                // ondemand_entry
-                .Label(ini_ondemand_entry)
-                .JMP(out var init_post_fetch) // always
-                // M-E bootstrap jumps to 604
-                // Load misc, fetch, and decoding table
-                .Label(out var start_init);
+            asm.Org(ini_address);
+
+            // ------------------------------------------------
+            // M-E bootstrap jumps to ini_address
+            // Load misc, fetch, and decoding table
+            // ------------------------------------------------
+            asm.Label(ini_ondemand_entry);
 
             // Initialize track sector
-            // zp: 6  -  7 => Track and sector for buffer 0: 18, 11   (0x300)
-            // zp: 8  -  9 => Track and sector for buffer 1: 18, 2    (0x400)
-            // zp: 10 - 11 => Track and sector for buffer 2: 18, 3    (0x500)
+            // zp: 6  -  7 => Track and sector for buffer 0: 18, fch_sector  (fch_address)
+            // zp: 8  -  9 => Track and sector for buffer 1: 18, misc_sector (misc_address)
+            // zp: 10 - 11 => Track and sector for buffer 2: 18, gcr_sector  (gcr_address)
             asm.LabelForward(out var init_track_sectors);
 
             asm
@@ -158,14 +179,20 @@ partial class Spindle
                 .BPL(ll0);
 
             // Load Misc, Fetch, and GCR table using ROM routines
+            // The order is important to allow enough time for the disk to fetch (interleave of ~ 7-10 sectors)
             asm
                 // lda #1 ; Read misc into $400
+                // 12 (this sector) -> (18, 2)
                 .LDA_Imm(1)
                 .JSR(out var dosreadblock)
+
                 // lda #0 ; Read fetch into $300
+                // (18, 2) -> (18, 11)
                 .LDA_Imm(0)
                 .JSR(dosreadblock)
+
                 // lda #2 ; Read gcr table into $500
+                // (18, 11) -> (18, 3)
                 .LDA_Imm(2)
                 .JSR(dosreadblock)
 
@@ -222,42 +249,46 @@ partial class Spindle
                 .ORA_Imm(VIA2PortB.Led | VIA2PortB.Motor | (VIA2PortB)VIA2Density.High) // led and motor on, bitrate for track 18
                 .STA(VIA2_PORT_B)
 
-                .LDA_Imm(19)
+                .LDA_Imm(19) // track length of track 18
                 .STA(tracklength)
 
+                // We have the guarantee that we are already on track 18 as per the dosreadblock above (misc, fetch, gcr)
                 .LDX_Imm(18 * 2)
                 .STX(cur_track)
                 .STX(req_track)
 
-                .INC(interested + 17)
-                .INC(ninterested)
-                .JMP(fch_drivecode_fetch);
-
-            asm.Label(init_post_fetch)
-                .LDA_Imm(6)
-                .STA(misc_ondemand_dest + 2)
-                .Label(out var ll)
-                .BIT(VIA1_PORT_B) // Wait until the host is up (atn held)
-                .BPL(ll)
-
-                // Initialisation complete.
-                .LDA_Imm(1 * 2)
-                .STA(req_track)
-                .LDA_Imm(misc_fetch_return.LowByte())
-                .STA(fch_mod_fetchret + 1)
-
-                // We have the first continuation record
-                // ready in the sector buffer.
-
-                .JMP(misc_transfer);
+                .LDX_Imm(comm_sector)
+                .STX(req_sector)
+                .JMP(fch_drivecode_fetch); // After this instruction, the Initialization block at 0x600 is no longer needed
 
             asm.Label(dosreadblock)
                 .STA(0xf9)
                 .JMP(0xd586);
 
             asm.Label(init_track_sectors)
-                .Append([18, 11, 18, 2, 18, 3]);
+                .Append([18, fch_sector, 18, misc_sector, 18, gcr_sector]);
 
+            // This code is called after the communication has been loaded at 0x100
+            asm.Label(ini_comm_from_stack)
+                // Move the communication code from the stack to 0x200
+                .TSX() // 0
+                .Label(out var ll_copy_stack)
+                .PLA()
+                .STA(comm_address, X)
+                .TSX()
+                .BNE(ll_copy_stack)
+
+                .LDA_Imm(misc_sendstash.LowByte())
+                .STA(fch_mod_fetchret + 1)
+                .LDA_Imm(misc_sendstash.HighByte())
+                .STA(fch_mod_fetchret + 2)
+
+                // We should start fetching the first job here
+                .JMP(ini_comm_from_stack);
+
+            // ------------------------------------------------
+            // Zero-page GCR decoding loop
+            // ------------------------------------------------
             asm.Label(zpcodeblock_to_relocate)
                 .Org(ZPORG)
                 .Label(zpcodeblock_begin)
@@ -280,8 +311,8 @@ partial class Spindle
                 .CLV()
                 .TAY();
             asm.Label(out var zpc_mod3)
-                .LDA(gcrdecode)
-                .ORA(gcrdecode + 1, Y)
+                .LDA(gcr_address)
+                .ORA(gcr_address + 1, Y)
 
                 .BVC(-2)
 
@@ -298,8 +329,8 @@ partial class Spindle
                 .TAY()
                 .LDX_Imm(0x79);
             asm.Label(zpc_mod5)
-                .LDA(gcrdecode, X)
-                .EOR(gcrdecode + 0x40, Y)
+                .LDA(gcr_address, X)
+                .EOR(gcr_address + 0x40, Y)
                 .PHA()
                 .LAX(VIA2_PORT_A)
                 .CLV()
@@ -311,8 +342,8 @@ partial class Spindle
                 .LDA_Imm(0xe0)
                 .SBX_Imm(0x00);
             asm.Label(zpc_mod7)
-                .LDA(gcrdecode, X)
-                .ORA(gcrdecode + 0x20, Y)
+                .LDA(gcr_address, X)
+                .ORA(gcr_address + 0x20, Y)
                 .PHA()
 
                 // start of a new 5-byte chunk
@@ -332,9 +363,9 @@ partial class Spindle
                 .ALR_Imm(0x3f)
                 .STA((zpc_mod3 + 1).LowByte());
             asm.Label(zpc_mod1)
-                .LDA(gcrdecode);
+                .LDA(gcr_address);
             asm.Label(zpc_mod2)
-                .EOR(gcrdecode, Y)
+                .EOR(gcr_address, Y)
                 .PHA()
                 .TSX()
                 .Label(zpc_bne);
@@ -349,6 +380,10 @@ partial class Spindle
                 .JMP(fch_zp_return)
                 .Label(zpcodeblock_end);
 
+            // TODO: check that size doesn't overwrite other zp variables
+            var sizeOfZpCodeBlock = (zpcodeblock_end.Address - zpcodeblock_begin.Address);
+
+            Debug.Assert(asm.SizeInBytes <= 256);
             asm.AppendBytes(256 - asm.SizeInBytes, 0xaa); // Cannot use CurrentOffset as the BaseAddress was reset for zp
         }
 
@@ -358,272 +393,26 @@ partial class Spindle
         //
         // ****************************************************************************************************************************************
         {
-            asm.Org(0x400)
-                // The new drivecode is now on the stack page; move it.
-                .Label(misc_ondemand_fetchret)
+            asm.Org(misc_address);
+            asm.Label(misc_ondemand_fetchret); // TODO: remove
+            
 
-                .LDX_Imm(0);
 
-            asm.Label(out var ondemand_move_loop)
-
-                .LDA(0x100, X); // TODO: use label?
-
-            asm.Label(misc_ondemand_dest)
-                .STA(0x200, X) // TODO: use label?
-                .INX()
-                .BNE(ondemand_move_loop)
-
-                .JMP(ini_ondemand_entry);
-
-            asm.Label(misc_nothing_fetched)
-                // More sectors in the current batch?
-
-                .LDA(ninterested)
-                .BNE(out var fetchmore)
-
-                // Nothing new to fetch.
-                // Is the next batch on a new track?
-
-                .LDA_Imm(0x40)
-                .BIT(2)
-                .BEQ(out var nonewtrack)
-
-                .EOR(2)
-                .STA(2)
-
-                .LDX(req_track)
-                .INX()
-                .INX()
-                .CPX_Imm(18 * 2)
-                .BNE(out var not18)
-
-                .LDX_Imm(19 * 2);
-
-            asm.Label(not18)
-                .STX(req_track)
-                .BNE(fetchmore);
-
-            asm.Label(nonewtrack)
-
-                // Do we have a stashed sector?
-                .LDX(nstashed)
-                .BEQ(out var nostash);
-
-            asm.Label(misc_sendstash)
-                .DEX()
-                .STX(nstashed)
-                .TXA()
-                .ORA_Imm((byte)(stashbufs >> 8))
-                .JMP(out var transferbuf);
-
-            asm.Label(nostash)
-
-                // Unpack the continuation buffer.
-                .LDY_Imm(0)
-                .LDX_Imm(20)
-                .SEC();
-
-            asm.Label(out var newbyte)
-                .LDA(0, Y)
-                .INY();
-
-            asm.Label(out var bitloop)
-                .ROR()
-                .BCC(out var notset)
-
-                .BEQ(newbyte)
-
-                .INC(interested, X)
-                .INC(ninterested)
-                .CLC();
-
-            asm.Label(notset)
-                .DEX()
-                .BPL(bitloop)
-
-                .LSR()
-                .BCC(out var nodemand)
-
-                .LDA_Imm(misc_ondemand_fetchret.LowByte())
-                .STA(fch_mod_fetchret + 1)
-                .LDA_Imm(18 * 2)
-                .STA(req_track);
-
-            asm.Label(nodemand)
-                .LDA_Imm(0)
-                .STA(bufptr + 1)
-                .STA(comm_mod_buf + 2)
-                .BEQ(out var checkunit0);
-
-            asm.Label(misc_fetch_return)
-                // We have a valid sector in the buffer.
-                // x is the sector number and z is set if
-                // ninterested was decremented to zero.
-                .BEQ(out var dontstash)
-
-                .LDY(nstashed)
-                .CPY_Imm(2)
-                .BCS(dontstash)
-
-                .LDA(interested + 2, X)
-                .BNE(out var dostash)
-
-                .LDA_Imm(VIA1PortB.ClockIn)
-                .AND(VIA1_PORT_B)
-                .BNE(dontstash);
-
-            asm.Label(dostash)
-                // Stash this sector, then go fetch another one.
-
-                .LabelForward(out var mod_dest)
-                .TYA()
-                .ORA_Imm((byte)(stashbufs >> 8))
-                .STA(mod_dest + 2)
-
-                .LDX_Imm(0);
-
-            asm.Label(out var stash_loop)
-                .LDA(0x100, X);
-            asm.Label(mod_dest)
-                .STA(stashbufs, X)
-                .DEX()
-                .BNE(stash_loop)
-
-                .INC(nstashed);
-            asm.Label(fetchmore)
-                .JMP(fch_drivecode_fetch);
-
-            asm.Label(dontstash);
-
-            asm.Label(misc_transfer)
-                // Turn off LED.
-
-                .LDA(VIA2_PORT_B)
-                .AND_Imm(0x77)
-                .STA(VIA2_PORT_B)
-
-                .LDA_Imm(1);
-            asm.Label(transferbuf)
-                .STA(bufptr + 1)
-                .STA(comm_mod_buf + 2)
-
-                // Full block?
-
-                .LabelForward(out var notfull)
-                .LDY_Imm(0)
-                .LDA(_[bufptr], Y)
-                .BPL(notfull)
-
-                .LDA_Imm(0xff)
-                .BMI(misc_nextunit); // always
-
-            asm.Label(notfull)
-
-                // Is there a continuation record?
-
-                .INY()
-                .ASL()
-                .BPL(out var nocontrec)
-
-                .LDX_Imm(0)
-
-                // A continuation record begins with a 3-byte
-                // sector set that can be followed by one or more
-                // postponed units of size 2..4.
-
-                .LDA_Imm(2); // number of bytes to copy - 1
-            asm.Label(out var headloop)
-                .STA(temp);
-            asm.Label(out var copy)
-                .LDA(_[bufptr], Y)
-                .INY()
-                .STA(0, X)
-                .INX()
-                .DEC(temp)
-                .BPL(copy)
-
-                .LDA(_[bufptr], Y)
-                .BEQ(out var headdone)
-
-                .CMP_Imm(5)
-                .BCC(headloop);
-
-            asm.Label(headdone)
-
-                .CPX_Imm(3)
-                .BNE(out var neednodummy)
-
-                // No chain heads. We have to insert a do-nothing unit
-                // in order to report to the host whether the job is complete.
-
-                .TXA()
-                .STA(0, X)
-                .LDX_Imm(7);
-            asm.Label(neednodummy)
-                .LDA_Imm(0)
-                .STA(0, X);
-            asm.Label(nocontrec);
-
-            // Y points to the length byte of the first hostside unit.
-
-            asm.Label(checkunit0)
-                .JMP(comm_checkunit);
-
-            asm.Label(misc_nextunit)
-                // A is the length of the next unit.
-
-                // We use the length to compute where the unit ends.
-                // We will also transfer the length, but for that we
-                // have to scramble the bits.
-
-                .STA(chunklen) // not counting the length byte
-                .LDX_Imm(0x09)
-                .SBX_Imm(0x00)
-                .EOR(scramble, X)
-                .STA(chunkprefix)
-                .JMP(comm_continue);
-
-            asm.Label(misc_async_cmd)
-
-                // Pull data to indicate busy.
-                // 33 cycles after atn edge, worst case.
-
-                .STA(VIA1_PORT_B)
-
-                // Incoming asynchronous command. Clear pending work.
-
-                .LDX_Imm(23)
-                .LDA_Imm(0);
-
-            asm.Label(out var async_clear_loop)
-                .STA(interested, X) // also ninterested
-                .DEX()
-                .BPL(async_clear_loop)
-
-                .STA(nstashed)
-
-                // Fetch command-handling code and jump to it.
-
-                .INC(interested + 6)
-                .INC(ninterested)
-                .LDA_Imm(misc_ondemand_fetchret.LowByte())
-                .STA(fch_mod_fetchret + 1)
-                .LDA_Imm(misc_ondemand_fetchret.HighByte())
-                .STA(fch_mod_fetchret + 2)
-                .LDA_Imm(18 * 2)
-                .STA(req_track)
-                .BNE(fetchmore) // always
-
-                .AppendBytes(256 - asm.CurrentOffset, 0xbb);
+            asm.AppendBytes(256 - asm.CurrentOffset, 0xbb);
         }
+
         // ****************************************************************************************************************************************
         //
-        // Fetch
+        // Fetch (VERIFIED)
         //
         // ****************************************************************************************************************************************
         {
             asm.Org(0x300)
                 .Label(fch_drivecode_fetch);
+
+            // ------------------------------------------------
+            // Seek to requested track if needed
+            // ------------------------------------------------
             asm.Label(out var wait)
                 .BIT(VIA2_INTERRUPT_STATUS) // Wait for previous step to settle
                 .BPL(wait)
@@ -658,29 +447,30 @@ partial class Spindle
                 .DEY();
 
             asm.Label(ratedone)
-                .LDX(zonebranch, Y)
+                .LDX(gcr_zonebranch, Y)
                 .STX((zpc_bne + 1).LowByte())
 
-                .LDX(zonesectors, Y)
+                .LDX(gcr_zonesectors, Y)
                 .STX(tracklength)
 
-                .ORA(zonebits, Y) // also turn on motor and LED
+                .ORA(gcr_zonebits, Y) // also turn on motor and LED
                 .STA(VIA2_PORT_B)
 
-                .LDY_Imm(0x19)
+                .LDY_Imm(0x19) // 0x1900 = 6.4 ms
                 .STY(VIA2_TIMER_HIGH); // write latch & counter, clear int
 
-            asm.Label(out var nosectors)
-                .JMP(misc_nothing_fetched);
+            // Loop to wait for the track to be positioned
+            asm.BNE(wait); // always
 
+            // ------------------------------------------------
+            // Fetch the requested sector
+            // ------------------------------------------------
             asm.Label(fetch_here)
-                .LDX(ninterested)
-                .BEQ(nosectors)
                 .ORA(ledmask) // turn on motor and usually LED
                 .STA(VIA2_PORT_B);
 
             asm.Label(out var fetchblock)
-                .LDX_Imm((byte)Mos6510OpCode.BEQ_Relative)
+                .LDX_Imm((byte)Mos6510OpCode.BNE_Relative)
                 .LDA(safety)
                 .BEQ(out var nosaf)
 
@@ -729,27 +519,32 @@ partial class Spindle
                 .TAY(); // Y = A
 
             asm.Label(first_mod3)
-                .LDA(gcrdecode) // lsb = 000ccccc
-                .ORA(gcrdecode + 1, Y) // y = ddddd000, lsb = 00000001
+                .LDA(gcr_address) // lsb = 000ccccc
+                .ORA(gcr_address + 1, Y) // y = ddddd000, lsb = 00000001
                 .PHA() // first byte to $100
-                // Stack Pointer = 0x1FF
+                       // Stack Pointer = 0x1FF
 
                 // get sector number from the lowest 5 bits of the first byte
 
                 .AND_Imm(0x1f)
                 .TAY()
-                .LDA(interested, Y);
+                .CPY(req_sector);
 
             asm.Label(mod_safety)
-                .BEQ(out var notint)
+                .BNE(fetchblock) // try again the requested sector
 
                 .JMP(zpc_entry); // x = ----eeee
 
             asm.Label(fch_zp_return)
                 .ARR_Imm(0xf0) // ddddd000
                 .TAY()
-                .LDA(gcrdecode, X) // x = 000ccccc
-                .ORA(gcrdecode + 1, Y); // y = ddddd000, lsb = 00000001
+                .LDA(gcr_address, X) // x = 000ccccc
+                .ORA(gcr_address + 1, Y); // y = ddddd000, lsb = 00000001
+
+            // ------------------------------------------------
+            // Verify the checksum of the sector
+            // ------------------------------------------------
+            // A = checksum of the sector
 
             asm.Label(out var prof_sum)
                 .LabelForward(out var fetch_retry);
@@ -791,53 +586,12 @@ partial class Spindle
                     .BNE(fetch_retry);
             }
 
-
             asm
                 .LSR(safety)
-                .BCS(fetch_retry)
-
-                .LDA(0x100)
-                .AND_Imm(0x1f)
-                .TAX()
-                .LSR(interested, X)
-                .DEC(ninterested);
+                .BCS(fetch_retry);
 
             asm.Label(fch_mod_fetchret)
-                .JMP(misc_ondemand_fetchret); // usually jmp fetch_return
-
-            asm.Label(notint)
-
-                // Are we keeping up with the Commodore ?
-                // The block under the drive head isn't interesting.
-                // So if no interesting block is about to arrive...
-
-                .LDX_Imm(2);
-
-            asm.Label(out var loop)
-                .INY()
-                .CPY(tracklength)
-                .BCC(out var nowrap)
-
-                .LDY_Imm(0);
-
-            asm.Label(nowrap)
-                .LDA(interested, Y)
-                .BNE(fetch_retry)
-
-                .DEX()
-                .BNE(loop)
-
-                // ...and we have a stashed sector...
-                .LDX(nstashed)
-                .BEQ(fetch_retry)
-
-                // ...and the host has nothing better to do...
-                .LDA_Imm(VIA1PortB.ClockIn)
-                .BIT(VIA1_PORT_B)
-                .BEQ(fetch_retry)
-
-                // ...then now is a good time to transmit it.
-                .JMP(misc_sendstash);
+                .JMP(ini_comm_from_stack); // start with ini and changed to misc_sendstash
 
             asm.Label(fetch_retry)
                 .JMP(fetchblock)
@@ -851,9 +605,8 @@ partial class Spindle
         //
         // ****************************************************************************************************************************************
         {
-            asm.Org(0x200)
-                // sector number + cont rec
-                .Append((byte)(17 | 0x40))
+            asm.Org(comm_address)
+                .Append(comm_sector)
                 // These are modified when the disk image is created.
                 .AppendBytes(3, 0)
                 .Append(0); // No regular units
@@ -930,7 +683,7 @@ partial class Spindle
             asm.Label(out var outermotor)
                 .LDA_Imm(0x9e)
                 .STA(VIA1_TIMER_HIGH)
-                .LDA_Imm(4);
+                .LDA_Imm(VIA1PortB.ClockIn);
             asm.Label(out var innermotor)
                 .BIT(VIA1_PORT_B)
                 .BNE(keepmotor)
@@ -988,7 +741,7 @@ partial class Spindle
                 // Warm up the motor for the next block.
 
                 .LDA(VIA2_PORT_B)
-                .ORA_Imm(4)
+                .ORA_Imm(VIA2PortB.Motor)
                 .STA(VIA2_PORT_B);
 
             asm.Label(motorok)
@@ -999,8 +752,33 @@ partial class Spindle
 
                 .LAX(chunkprefix)
                 .AND_Imm(0x0f)
-                .BPL(out var sendentry);
+                .BPL(out var sendentry); // always
 
+            // Krill explanation from https://csdb.dk/forums/?roomid=12&topicid=146327&showallposts=1
+            //
+            // Sending bytes over serial.
+            // 
+            // The traditional method to send over bitpairs is this:
+            // $1800 ----C-D- CLK and DATA
+            //        ___|_|
+            //       | __|
+            //       vv
+            // $DD00 DC------ go there.
+            // Note how both bits are one bit apart in the send register but directly adjacent in the receive register, and they swap order on the way.
+            // Both issues are usually solved by pre-scrambling or using look-up tables to do the scrambling.
+            // This is a bit cumbersome, as it takes cycles and memory for the scrambling, or special pre-scrambled storage formats.
+            // 
+            // Now here's the trick: using ATNA.
+            // $1800 ---DC-0- DATA and CLK
+            //        __||
+            //       | __|
+            //       vv
+            // $DD00 DC------ go there.
+            // It's that simple! :D
+            // 
+            // Note that DATA OUT ($1800 bit 1) must be cleared, and that both methods presented here are performated with ATN being unasserted.
+            // The new method works with ATN asserted (as does the traditional one), but then the usual EOR-bitflip (DATA and CLOCK signals going from drive to C-64 are inverted) is done only on CLK but not on DATA.
+            
             // Writes to $1800 must happen 13 cycles after atn changed, worst case.
             // Atn can change 4 cycles after writing to $1800, worst case.
             // This allows up to 7 cycles between each check+write idiom.
@@ -1009,7 +787,7 @@ partial class Spindle
 
                 .BIT(VIA1_PORT_B)
                 .BMI(-5)
-                .STA(VIA1_PORT_B) // 0--cd000
+                .STA(VIA1_PORT_B)  // 0--cd000, c = Data Out via ATNA, d = Clock Out (c gets inverted due to atna)
 
                 .LSR()
                 .ALR_Imm(0xf0)
@@ -1017,7 +795,7 @@ partial class Spindle
 
                 .BIT(VIA1_PORT_B)
                 .BPL(-5)
-                .STA(VIA1_PORT_B); // 000ab000 (a gets inverted due to atna)
+                .STA(VIA1_PORT_B); // 000ab000, a = Data Out via ATNA, b = Clock Out (a gets inverted due to atna)
 
             asm.Label(comm_mod_buf)
                 .LAX(0x100, Y)
@@ -1027,13 +805,13 @@ partial class Spindle
                 .BMI(-5);
 
             asm.Label(sendentry)
-                .STA(VIA1_PORT_B) // 0000e-g-
+                .STA(VIA1_PORT_B) // 0000e-g-  e = Clock Out, g = Data Out
                 .ASL()
                 .ORA_Imm(VIA1PortB.AtnaOut)
                 .CPY(chunkend)
                 .BIT(VIA1_PORT_B)
                 .BPL(-5)
-                .STA(VIA1_PORT_B) // 0001f-h0
+                .STA(VIA1_PORT_B) // 0001f-h0, f = Clock Out, h = Data Out
                 .TXA()
                 .BCC(sendloop)
 
@@ -1214,8 +992,7 @@ partial class Spindle
                 .LDA(out var seektrack, Y)
                 .STA(req_track)
                 .LDX(out var seeksector, Y)
-                .INC(interested, X)
-                .INC(ninterested)
+                .STA(req_sector)
 
                 .LabelForward(out var seek_fetchret)
                 .LDA_Imm(0x0c)
