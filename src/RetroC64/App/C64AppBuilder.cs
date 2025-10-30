@@ -281,7 +281,6 @@ public class C64AppBuilder : IC64FileContainer
 
                         if (!_isLiveFileAutoStarted || _customCodeReloadAction is null)
                         {
-                            Log.LogInformation("Send restart");
                             monitor.Autostart(new AutostartCommand()
                             {
                                 Filename = fileToLaunch.FileName,

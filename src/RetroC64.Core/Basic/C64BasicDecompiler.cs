@@ -9,11 +9,6 @@ namespace RetroC64.Basic;
 using static C64CharSet;
 
 /// <summary>
-/// Represents a decompiled C64 BASIC program, including its source code and start address.
-/// </summary>
-public readonly record struct C64BasicProgram(string SourceCode, ushort StartAddress);
-
-/// <summary>
 /// Provides functionality to decompile tokenized C64 BASIC binary programs into source code.
 /// </summary>
 public static class C64BasicDecompiler

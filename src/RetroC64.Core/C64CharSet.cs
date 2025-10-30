@@ -34,13 +34,25 @@ public static class C64CharSet
     /// <param name="shifted">A boolean indicating whether to use the shifted character mapping. Defaults to <c>false</c>.</param>
     /// <returns>The character corresponding to the specified byte value.</returns>
     public static char PETSCIIToChar(byte b, bool shifted = false) => Unsafe.Add(ref MemoryMarshal.GetReference(shifted ? Shifted: Unshifted), b);
-    
+
+    /// <summary>
+    /// Converts the specified string to a PET screen code byte array.
+    /// </summary>
+    /// <param name="text">The text to convert to PET screen codes. Cannot be null.</param>
+    /// <returns>A byte array containing the PET screen codes corresponding to the input text.</returns>
     public static byte[] StringToPETScreenCode(string text)
     {
         var buffer = StringToPETSCII(text);
         return PETSCIIToPETScreenCode(buffer);
     }
 
+    /// <summary>
+    /// Converts a sequence of PETSCII character codes to their corresponding PETSCII screen codes used by Commodore PET
+    /// and C64 systems.
+    /// </summary>
+    /// <param name="buffer">A read-only span of bytes containing PETSCII character codes to convert.</param>
+    /// <returns>A byte array containing the PETSCII screen codes corresponding to the input character codes. The length of the
+    /// returned array matches the length of the input buffer.</returns>
     public static byte[] PETSCIIToPETScreenCode(ReadOnlySpan<byte> buffer)
     {
         // From https://sta.c64.org/cbm64pettoscr.html
@@ -59,7 +71,12 @@ public static class C64CharSet
         }
         return dest;
     }
-    
+
+    /// <summary>
+    /// Converts a string to its corresponding PETSCII byte array representation.
+    /// </summary>
+    /// <param name="str">The input string to convert to PETSCII encoding. Cannot be null.</param>
+    /// <returns>A byte array containing the PETSCII-encoded representation of the input string.</returns>
     public static byte[] StringToPETSCII(string str)
     {
         var buffer = new List<byte>();

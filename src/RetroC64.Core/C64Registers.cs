@@ -13,9 +13,9 @@ namespace RetroC64;
 /// </remarks>
 public static class C64Registers
 {
-    public const ushort SCREEN_CHARACTER_ADDRESS_DEFAULT = 0x0400;
+    public const ushort VIC2_SCREEN_CHARACTER_ADDRESS_DEFAULT = 0x0400;
 
-    public const ushort SPRITE0_ADDRESS_DEFAULT = 0x07F8;
+    public const ushort VIC2_SPRITE0_ADDRESS_DEFAULT = VIC2_SCREEN_CHARACTER_ADDRESS_DEFAULT + 0x3F8;
 
     // VIC-II (Video Interface Chip) Registers
     /// <summary>

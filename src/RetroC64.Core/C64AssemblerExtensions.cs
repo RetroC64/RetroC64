@@ -12,6 +12,9 @@ using static RetroC64.C64Registers;
 
 namespace RetroC64;
 
+/// <summary>
+/// Provides extension methods for generating common inline Commodore 64 (C64) assembly routines using a <see cref="C64Assembler"/> instance.
+/// </summary>
 public static class C64AssemblerExtensions
 {
     /// <summary>
@@ -348,6 +351,23 @@ public static class C64AssemblerExtensions
 
         return asm;
     }
+
+    /// <summary>
+    /// Generates 6502 assembly instructions to copy a block of memory from a source address to a destination address.
+    /// </summary>
+    /// <remarks>This method emits instructions that copy the specified number of bytes from the source to the
+    /// destination address, handling blocks of up to 256 bytes efficiently. The generated code is reentrant and
+    /// restores the source and destination addresses as needed. If the length is zero, no instructions are emitted and
+    /// the assembler is returned unchanged.</remarks>
+    /// <param name="asm">The assembler instance used to emit the generated instructions.</param>
+    /// <param name="src">The starting address of the source memory block to copy.</param>
+    /// <param name="dst">The starting address of the destination memory block where data will be copied.</param>
+    /// <param name="length">The number of bytes to copy. Must be greater than 0.</param>
+    /// <param name="debugFilePath">The file path of the source code file that invoked this method. This value is provided automatically by the
+    /// compiler and is used for debugging purposes.</param>
+    /// <param name="debugLineNumber">The line number in the source code file that invoked this method. This value is provided automatically by the
+    /// compiler and is used for debugging purposes.</param>
+    /// <returns>The assembler instance with the memory copy instructions appended.</returns>
     public static C64Assembler CopyMemory(this C64Assembler asm, Mos6502ExpressionU16 src, Mos6502ExpressionU16 dst, ushort length, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         if (length == 0) return asm;

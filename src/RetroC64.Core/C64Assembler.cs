@@ -12,14 +12,28 @@ namespace RetroC64;
 /// </summary>
 public class C64Assembler(ushort baseAddress = 0xC000) : Mos6510Assembler<C64Assembler>(baseAddress)
 {
+    /// <summary>
+    /// Gets the allocator used for managing zero-page memory.
+    /// </summary>
     public ZeroPageAllocator Zp { get; } = new C64ZeroPageAllocator();
 
+    /// <summary>
+    /// Allocates a new zero-page address and assigns it to the specified output parameter.
+    /// </summary>
+    /// <param name="zp">When this method returns, contains the allocated zero-page address.</param>
+    /// <param name="zpExpression">The expression passed for the zero-page address parameter. This is typically provided by the compiler and used
+    /// for diagnostic purposes.</param>
+    /// <returns>The current instance of the assembler, enabling method chaining.</returns>
     public C64Assembler ZpAlloc(out ZeroPageAddress zp, [CallerArgumentExpression("zp")] string? zpExpression = null)
     {
         Zp.Allocate(out zp, zpExpression);
         return this;
     }
-    
+
+    /// <summary>
+    /// Provides a zero-page allocator implementation for the Commodore 64, reserving system addresses used by the
+    /// processor port.
+    /// </summary>
     private class C64ZeroPageAllocator : ZeroPageAllocator
     {
         public C64ZeroPageAllocator()
@@ -30,11 +44,4 @@ public class C64Assembler(ushort baseAddress = 0xC000) : Mos6510Assembler<C64Ass
 
         public override bool IsSystem(byte address) => address < 2;
     }
-}
-
-public class C64AssemblerDebugMap : Mos6502AssemblerDebugMap
-{
-    public List<Mos6502Label> Labels { get; } = new();
-
-    public List<ZeroPageAddress> ZpLabels { get; } = new();
 }

@@ -91,7 +91,7 @@ public class C64NETConf2025 : C64AppAsmProgram
 
         if (part == DemoPart.Case0_ClearScreen)
         {
-            asm.ClearMemoryBy256BytesBlock(SCREEN_CHARACTER_ADDRESS_DEFAULT, 4, 0); // use 32 for spaces
+            asm.ClearMemoryBy256BytesBlock(VIC2_SCREEN_CHARACTER_ADDRESS_DEFAULT, 4, 0); // use 32 for spaces
             EndAsmInitAndInfiniteLoop(asm);
 
             asm.EndCodeSection();
@@ -101,7 +101,7 @@ public class C64NETConf2025 : C64AppAsmProgram
 
         if (part == DemoPart.Case1_Logo)
         {
-            asm.CopyMemoryBy256BytesBlock(screenBuffer, SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
+            asm.CopyMemoryBy256BytesBlock(screenBuffer, VIC2_SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
             EndAsmInitAndInfiniteLoop(asm);
 
             asm.EndCodeSection();
@@ -114,21 +114,23 @@ public class C64NETConf2025 : C64AppAsmProgram
         }
 
         // Sprite
-        using var sprite = new C64Sprite();
+        using var sprite = new C64SpriteMono();
         sprite.UseStroke(2.0f).Canvas.DrawOval(new SKRect(1, 1, 23, 20), sprite.Brush);
+        //sprite.UseStroke(2.0f).Canvas.DrawRoundRect(new SKRect(4, 4, 20, 17), 4, 4, sprite.Brush);
+        //sprite.UseFill().Canvas.DrawOval(new SKRect(8, 8, 16, 13), sprite.Brush);
         sprite.Canvas.Flush();
         var spriteData = sprite.ToBits();
 
         if (part == DemoPart.Case2_LogoAndSprites)
         {
-            asm.CopyMemoryBy256BytesBlock(screenBuffer, SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
+            asm.CopyMemoryBy256BytesBlock(screenBuffer, VIC2_SCREEN_CHARACTER_ADDRESS_DEFAULT, 4);
         }
 
         // Sprite Address / 64 relative to the start of bank 0 ($0000)
         var spriteAddr64 = (spriteBuffer  / 64).LowByte();
         asm.LDA_Imm(spriteAddr64);
         for (int i = 0; i < 8; i++)
-            asm.STA((ushort)(SPRITE0_ADDRESS_DEFAULT + i));
+            asm.STA((ushort)(VIC2_SPRITE0_ADDRESS_DEFAULT + i));
 
         asm.OnResolveEnd(() =>
         {
@@ -288,7 +290,7 @@ public class C64NETConf2025 : C64AppAsmProgram
 
             // Store it to screen memory
             asm.Label(mod_screen_address)
-                .STA(SCREEN_CHARACTER_ADDRESS_DEFAULT)
+                .STA(VIC2_SCREEN_CHARACTER_ADDRESS_DEFAULT)
 
                 .INC(screenBufferOffset)
                 .BNE(out var skipHigh)
@@ -478,7 +480,7 @@ public class C64NETConf2025 : C64AppAsmProgram
             .EndCodeSection();
 
         asm.EndCodeSection(); // Englobe all code sections into a single block
-        
+
         // -------------------------------------------------------------------------
         //
         // Buffers
