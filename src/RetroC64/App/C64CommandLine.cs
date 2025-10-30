@@ -1,7 +1,8 @@
 // Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license.
+// Licensed under the BSD-Clause2 license.
 // See license.txt file in the project root for full license information.
 
+using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using XenoAtom.CommandLine;
 
@@ -18,6 +19,7 @@ public sealed class C64CommandLine : CommandApp
     internal C64CommandLine(C64AppBuilder builder) : base(GetSimpleExeName())
     {
         _builder = builder;
+        Settings = _builder.Settings;
         //var _ = "";
 
         Add(new HelpOption());
@@ -25,25 +27,33 @@ public sealed class C64CommandLine : CommandApp
 
         BuildCommand = new Command("build", "Builds this C64 App.")
         {
+            new HelpOption(),
+
             async (ctx, arguments) =>
             {
                 await _builder.BuildAsync();
                 return 0;
             }
         };
+        AddCommonOptions(BuildCommand);
         Add(BuildCommand);
-
-
-        LiveCommand = new Command("live", "Run this C64 App with Vice Emulator and keep it live synced.")
+        
+        RunCommand = new Command("run", "Run this C64 App with Vice Emulator and keep it live synced.")
         {
+            new HelpOption(),
+
+            {"vice-log", $"Enables VICE monitor logging to the console. Default is {_builder.Settings.EnableViceMonitorLogging.ToString().ToLowerInvariant()}.", s => Settings.EnableViceMonitorLogging = s is not null},
+            {"vice-log-verbose", $"Enables verbose VICE monitor logging. Default is {_builder.Settings.EnableViceMonitorVerboseLogging.ToString().ToLowerInvariant()}.", s => Settings.EnableViceMonitorVerboseLogging = s is not null},
+            {"dap-port=", $"Sets the Debug Adapter Protocol port. Default is {_builder.Settings.DebugAdapterProtocolPort}.", s => Settings.DebugAdapterProtocolPort = int.Parse(s ?? _builder.Settings.DebugAdapterProtocolPort.ToString()) },
+
             async (ctx, arguments) =>
             {
-                await _builder.LiveAsync();
+                await _builder.RunAsync();
                 return 0;
             }
-
         };
-        Add(LiveCommand);
+        AddCommonOptions(RunCommand);
+        Add(RunCommand);
     }
 
     /// <summary>
@@ -54,7 +64,29 @@ public sealed class C64CommandLine : CommandApp
     /// <summary>
     /// Gets the command that launches the VICE emulator and live-syncs code changes.
     /// </summary>
-    public Command LiveCommand { get; }
+    public Command RunCommand { get; }
+
+    /// <summary>
+    /// Gets the current configuration settings for the C64 application builder.
+    /// </summary>
+    public C64AppBuilderSettings Settings { get; }
+
+    private void AddCommonOptions(Command command)
+    {
+        // Log level
+        command.Add(
+            "l|level=",
+            $"Sets the minimum log {{LEVEL}} output. Default is {_builder.Settings.LogLevel.ToString().ToLowerInvariant()}. Supported values: {string.Join(", ", Enum.GetNames<LogLevel>().Select(x => x.ToLowerInvariant()))}.",
+            s => Settings.LogLevel = Enum.Parse<LogLevel>(s ?? Settings.LogLevel.ToString(), true));
+
+
+        // Working folder
+        command.Add(
+            "retro-folder=",
+            $"Sets the RetroC64 working folder. Default is `{_builder.Settings.RetroC64Folder}`.",
+            s => { if (!string.IsNullOrWhiteSpace(s)) Settings.RetroC64Folder = System.IO.Path.GetFullPath(s); });
+
+    }
 
     private static string GetSimpleExeName()
     {

@@ -11,13 +11,16 @@ namespace RetroC64.App;
 /// </summary>
 public class C64AppBuilderSettings
 {
+    // String-keyed property bag (case-insensitive) for ad-hoc plugin options.
+    private readonly Dictionary<string, object?> _dynamicOptions = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Enables logging of VICE monitor output to the console.
+    /// Enables logging of VICE monitor output to the console. Default is false.
     /// </summary>
     public bool EnableViceMonitorLogging { get; set; }
 
     /// <summary>
-    /// Enables verbose logging of VICE monitor output.
+    /// Enables verbose logging of VICE monitor output. Default is false.
     /// </summary>
     public bool EnableViceMonitorVerboseLogging { get; set; }
 
@@ -50,4 +53,48 @@ public class C64AppBuilderSettings
     /// Gets or sets the port number used for the Debug Adapter Protocol connection.
     /// </summary>
     public int DebugAdapterProtocolPort { get; set; } = 6503;
+
+    /// <summary>
+    /// Exposes all ad-hoc options added by plugins. Keys are case-insensitive.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?> DynamicOptions => _dynamicOptions;
+
+    /// <summary>
+    /// Sets an ad-hoc option value for the given key.
+    /// </summary>
+    public void SetOption<T>(string key, T? value) => _dynamicOptions[key] = value;
+
+    /// <summary>
+    /// Tries to get an ad-hoc option value converted to T. Returns false if missing or incompatible type.
+    /// </summary>
+    public bool TryGetOption<T>(string key, out T? value)
+    {
+        if (_dynamicOptions.TryGetValue(key, out var obj))
+        {
+            if (obj is null)
+            {
+                value = default;
+                return true;
+            }
+            if (obj is T t)
+            {
+                value = t;
+                return true;
+            }
+        }
+        value = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Gets an ad-hoc option value or returns defaultValue if missing or incompatible type.
+    /// </summary>
+    public T? GetOption<T>(string key, T? defaultValue = default) =>
+        TryGetOption<T>(key, out var value) ? value : defaultValue;
+
+    /// <summary>
+    /// Removes an ad-hoc option by key.
+    /// </summary>
+    public bool RemoveOption(string key) => _dynamicOptions.Remove(key);
+
 }

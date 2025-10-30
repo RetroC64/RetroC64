@@ -8,6 +8,6 @@ internal class C64AppDebuggerContext : C64AppContext
 {
     internal C64AppDebuggerContext(C64AppBuilder builder) : base(builder)
     {
-        Log = builder.LogFactory.CreateLogger($"[gray]DebugC64[/]-{builder.Name}");
+        Log = builder.LogFactory!.CreateLogger($"[gray]DebugC64[/]-{builder.Name}");
     }
 }

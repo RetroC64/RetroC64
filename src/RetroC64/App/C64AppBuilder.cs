@@ -6,12 +6,14 @@ using Asm6502;
 using Lunet.Extensions.Logging.SpectreConsole;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RetroC64.Vice;
 using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Text;
+using XenoAtom.CommandLine;
 
 namespace RetroC64.App;
 
@@ -21,8 +23,8 @@ namespace RetroC64.App;
 /// </summary>
 public class C64AppBuilder : IC64FileContainer
 {
-    private bool _commandLinePrepared;
-    private readonly ILoggerFactory _logFactory;
+    private ILoggerFactory? _logFactory;
+    private ILogger _log;
     private readonly List<(string FileName, C64AssemblerDebugMap? DebugMap)> _buildGeneratedFilesForVice = new();
     private readonly ManualResetEventSlim _hotReloadEvent = new(false);
     private CodeReloadEvent? _codeReloadEvent;
@@ -34,7 +36,7 @@ public class C64AppBuilder : IC64FileContainer
     private Func<ViceMonitor, Task>? _customCodeReloadAction;
     private readonly Func<C64AppElement> _factory;
     private C64AppElement? _rootElement;
-    
+
     internal static readonly bool IsDotNetWatch = "1".Equals(Environment.GetEnvironmentVariable("DOTNET_WATCH"), StringComparison.Ordinal);
 
     /// <summary>
@@ -42,12 +44,81 @@ public class C64AppBuilder : IC64FileContainer
     /// </summary>
     /// <param name="factory">Root element of the app graph.</param>
     /// <param name="settings">Optional global settings.</param>
-    public C64AppBuilder(Func<C64AppElement> factory, C64AppBuilderSettings? settings = null)
+    private C64AppBuilder(Func<C64AppElement> factory, C64AppBuilderSettings? settings = null)
     {
         _factory = factory;
         _cancellationTokenSource = new CancellationTokenSource();
         Settings = settings ?? new C64AppBuilderSettings();
         CommandLine = new(this);
+
+        _log = NullLogger.Instance;
+
+        C64HotReloadService.UpdateApplicationEvent += HotReloadServiceOnUpdateApplicationEvent;
+
+        var rootElement = factory();
+        var prepareContext = new C64PrepareCommandLineContext(this);
+        rootElement.InternalPrepareCommandLine(prepareContext);
+        Name = rootElement.Name;
+    }
+
+    /// <summary>
+    /// Gets the global settings used by the builder.
+    /// </summary>
+    public C64AppBuilderSettings Settings { get; }
+    
+    /// <summary>
+    /// Gets the command-line host exposing build and live commands.
+    /// </summary>
+    public C64CommandLine CommandLine { get; }
+
+    /// <summary>
+    /// Gets the name of the app being built.
+    /// </summary>
+    public string Name { get; }
+
+    /// <summary>
+    /// Gets the logger instance used by the builder.
+    /// </summary>
+    public ILogger Log => _log;
+
+    /// <summary>
+    /// Gets the factory used to create logger instances for logging application events and diagnostics.
+    /// </summary>
+    public ILoggerFactory? LogFactory => _logFactory;
+
+    /// <summary>
+    /// Gets the file service used to persist generated artifacts (e.g., PRG/D64) to disk.
+    /// </summary>
+    public IC64FileService FileService => Settings.FileService;
+    
+    /// <summary>
+    /// Runs the command-line host with the provided arguments.
+    /// </summary>
+    /// <param name="args">Process arguments.</param>
+    /// <returns>Exit code.</returns>
+    public async Task<int> Run(string[] args)
+    {
+        int width = 120;
+        int optionWidth = 40;
+        if (!Console.IsOutputRedirected)
+        {
+            try
+            {
+                width = Math.Min(120, Console.WindowWidth);
+                optionWidth = Math.Min(29, width / 3);
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+
+        return await CommandLine.RunAsync(args, new CommandRunConfig(width, optionWidth));
+    }
+
+    private void EnsureLogFactory()
+    {
+        if (_logFactory is not null) return;
 
         _logFactory = LoggerFactory.Create(configure =>
             {
@@ -84,65 +155,16 @@ public class C64AppBuilder : IC64FileContainer
             }
         );
 
-        C64HotReloadService.UpdateApplicationEvent += HotReloadServiceOnUpdateApplicationEvent;
-
-        var rootElement = factory();
-        Name = rootElement.Name;
-        Log = _logFactory.CreateLogger($"[gray]RetroC64[/]-{Name}");
+        _log = _logFactory.CreateLogger($"[gray]RetroC64[/]-{Name}");
     }
 
-    /// <summary>
-    /// Gets the global settings used by the builder.
-    /// </summary>
-    public C64AppBuilderSettings Settings { get; }
-    
-    /// <summary>
-    /// Gets the command-line host exposing build and live commands.
-    /// </summary>
-    public C64CommandLine CommandLine { get; }
-
-    /// <summary>
-    /// Gets the name of the app being built.
-    /// </summary>
-    public string Name { get; }
-    
-    /// <summary>
-    /// Gets the logger instance used by the builder.
-    /// </summary>
-    public ILogger Log { get; }
-
-    /// <summary>
-    /// Gets the factory used to create logger instances for logging application events and diagnostics.
-    /// </summary>
-    public ILoggerFactory LogFactory => _logFactory;
-
-    /// <summary>
-    /// Gets the file service used to persist generated artifacts (e.g., PRG/D64) to disk.
-    /// </summary>
-    public IC64FileService FileService => Settings.FileService;
-    
-    /// <summary>
-    /// Runs the command-line host with the provided arguments.
-    /// </summary>
-    /// <param name="args">Process arguments.</param>
-    /// <returns>Exit code.</returns>
-    public async Task<int> Run(string[] args)
-    {
-        if (!_commandLinePrepared)
-        {
-            var prepareContext = new C64PrepareCommandLineContext(this);
-            _factory().InternalPrepareCommandLine(prepareContext);
-            _commandLinePrepared = true;
-        }
-
-        return await CommandLine.RunAsync(args);
-    }
-    
     /// <summary>
     /// Builds the current app graph and emits files to the active container.
     /// </summary>
-    public async Task BuildAsync()
+    internal async Task BuildAsync()
     {
+        EnsureLogFactory(); // Allow to configure the settings after construction
+
         _buildGeneratedFilesForVice.Clear();
         
         if (!TryInitializeAppElements())
@@ -175,8 +197,10 @@ public class C64AppBuilder : IC64FileContainer
     /// <summary>
     /// Starts the VICE emulator and enters a loop that builds, autostarts the program, and live-syncs code changes.
     /// </summary>
-    public async Task LiveAsync()
+    internal async Task RunAsync()
     {
+        EnsureLogFactory(); // Allow to configure the settings after construction
+
         _isLiveFileAutoStarted = false;
 
         // We start to initialize the app elements (to allow to configure global settings like vice monitor)
@@ -365,7 +389,7 @@ public class C64AppBuilder : IC64FileContainer
             services.AddSingleton(this);
             services.AddSingleton<IC64CacheService, C64CacheService>();
             services.AddSingleton<IC64SidService, C64SidService>();
-            services.AddSingleton<ILoggerFactory>(_logFactory);
+            services.AddSingleton<ILoggerFactory>(_logFactory!);
 
             // TODO: Allow to plug services from AppElements and settings
 
