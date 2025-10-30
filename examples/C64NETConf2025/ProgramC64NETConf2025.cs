@@ -14,12 +14,6 @@ return await C64AppBuilder.Run<C64NETConf2025>(args);
 
 public class C64NETConf2025 : C64AppAsmProgram
 {
-    protected override void Initialize(C64AppInitializeContext context)
-    {
-        context.Settings.EnableViceMonitorLogging = false;
-        context.Settings.EnableViceMonitorVerboseLogging = false;
-    }
-
     protected override Mos6502Label Build(C64AppBuildContext context, C64Assembler asm)
     {
         // Select which showcase of the demo to build
