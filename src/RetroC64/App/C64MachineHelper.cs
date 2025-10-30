@@ -4,7 +4,6 @@
 
 using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
-using RetroC64.Vice.Monitor.Responses;
 
 namespace RetroC64.App;
 

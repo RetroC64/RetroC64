@@ -21,8 +21,11 @@ internal class C64AssemblerDebugInfoProcessor : C64AppContext
 
     public string ProgramName => _programName ?? "program";
 
+    public Dictionary<string, int> Labels { get; } = new();
+
     public void Reset()
     {
+        Labels.Clear();
         _codeMemoryRanges.Clear();
         _mapFilePathToDebugLines.Clear();
         _programName = null;
@@ -74,12 +77,12 @@ internal class C64AssemblerDebugInfoProcessor : C64AppContext
         return false;
     }
 
-    public void AddDebugMap(Mos6502AssemblerDebugMap? debugMap)
+    public void AddDebugMap(C64AssemblerDebugMap? debugMap)
     {
         if (debugMap is null) return;
 
         List<C64MemoryRange> newCodeMemoryRanges = new();
-
+        
         Mos6502AssemblerDebugInfo? orgDebugInfo = null;
         Mos6502AssemblerDebugInfo? endDebugInfo = null;
 
@@ -184,6 +187,22 @@ internal class C64AssemblerDebugInfoProcessor : C64AppContext
         _codeMemoryRanges.AddRange(newCodeMemoryRanges);
 
         UpdateFilesToLineInfo();
+        
+        foreach (var label in debugMap.Labels)
+        {
+            if (!string.IsNullOrEmpty(label.Name))
+            {
+                Labels[label.Name] = label.Address;
+            }
+        }
+
+        foreach (var label in debugMap.ZpLabels)
+        {
+            if (!string.IsNullOrEmpty(label.Name))
+            {
+                Labels[label.Name] = label.Address;
+            }
+        }
 
 
         void CloseCurrentCodeRange(ushort? address, bool logWarning = true)

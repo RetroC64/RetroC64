@@ -35,6 +35,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
     private readonly C64AssemblerDebugInfoProcessor _debugInfoProcessor;
     private bool _shuttingDown;
+    private bool _isVisualStudioAttached;
 
     private CheckpointResponse? _breakpointHit;
     
@@ -193,9 +194,9 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
         }
 
         // We expect only RetroC64 debugger type to work
-        if (!arguments.ConfigurationProperties.TryGetValue("type", out var token) || token.ToString() != "RetroC64")
+        if (arguments.ConfigurationProperties.TryGetValue("type", out var token) && token.ToString() != "RetroC64")
         {
-            throw new InvalidOperationException("Invalid debugger type. Expecting `RetroC64`");
+            throw new InvalidOperationException($"Unexpected debugger type {token}. Supporting only RetroC64 if specified");
         }
 
         //foreach(var argPair in arguments.ConfigurationProperties)
@@ -224,7 +225,6 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
     
     protected override ConfigurationDoneResponse HandleConfigurationDoneRequest(ConfigurationDoneArguments arguments)
     {
-        Protocol.SendEvent(new ThreadEvent(ThreadEvent.ReasonValue.Started, 0));
         Enabled = true;
         return new ConfigurationDoneResponse();
     }
@@ -374,13 +374,31 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
     protected override EvaluateResponse HandleEvaluateRequest(EvaluateArguments arguments)
     {
-        return new EvaluateResponse()
-        {
-            Result = "0",
-            VariablesReference = 0
-        };
-    }
+        var expression = arguments.Expression;
 
+        try
+        {
+            var parser = new C64ExpressionParser();
+            var expr = parser.Parse(expression);
+            var context = new C64ExpressionEvaluationContext(_machineState, _debugInfoProcessor.Labels);
+            var result = expr.Evaluate(context);
+
+            return new EvaluateResponse()
+            {
+                Result = result > 0xFF ? $"${result:X4} ({result})" : $"${result:X2} ({result})",
+                VariablesReference = 0
+            };
+        }
+        catch (Exception ex)
+        {
+            return new EvaluateResponse()
+            {
+                Result = $"Error: {ex.Message}",
+                VariablesReference = 0
+            };
+        }
+    }
+    
     protected override GotoResponse HandleGotoRequest(GotoArguments arguments)
     {
         return base.HandleGotoRequest(arguments);
@@ -393,12 +411,19 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
     protected override InitializeResponse HandleInitializeRequest(InitializeArguments arguments)
     {
+        // Detect which debugger (VSCode or VisualStudio) is attaching
+        _isVisualStudioAttached = arguments.AdditionalProperties.TryGetValue("clientID", out var clientIDToken) && clientIDToken.ToString().Equals("visualstudio", StringComparison.OrdinalIgnoreCase);
+        
         // ⚠️ NOTE: In the specs it says that Initialized event must be sent after the initialize request,
         // but it would complicate the code to send it later asynchronously.
         // It seems to be ok, so keep it here for simplicity.
         Protocol.SendEvent(new InitializedEvent());
-        Protocol.SendEvent(new ThreadEvent(ThreadEvent.ReasonValue.Started, 0));
 
+        LocalSuspendMonitor(() =>
+        {
+            CaptureMachineState();
+        });
+            
         return new InitializeResponse()
         {
             // Basic features supported
@@ -414,10 +439,11 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
             SupportsWriteMemoryRequest = true,
             SupportsDisassembleRequest = true,
 
+            SupportsEvaluateForHovers = true,
+
             // All other features are not applicable or not supported yet
             // TODO: categorize better which features is not applicable vs not supported yet
             /*
-            SupportsEvaluateForHovers = false, // TODO
             SupportsTerminateRequest = false, // TODO
             SupportsGotoTargetsRequest = false, // TODO
 
@@ -523,14 +549,20 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
     
     protected override ScopesResponse HandleScopesRequest(ScopesArguments arguments)
     {
+        var cpuRegistersScope = new Scope()
+        {
+            Name = "CPU Registers",
+            VariablesReference = (int)C64DebugVariableScope.CpuRegisters,
+            Expensive = false
+        };
+
+        if (!_isVisualStudioAttached)
+        {
+            cpuRegistersScope.PresentationHint = Scope.PresentationHintValue.Registers;
+        }
+        
         var response = new ScopesResponse([
-            new ()
-            {
-                Name = "CPU Registers",
-                VariablesReference = (int)C64DebugVariableScope.CpuRegisters,
-                PresentationHint = Scope.PresentationHintValue.Registers,
-                Expensive = false
-            },
+            cpuRegistersScope,
             new ()
             {
                 Name = "CPU Flags",
@@ -576,7 +608,13 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
         ]);
         return response;
     }
-    
+
+    protected override SetExceptionBreakpointsResponse HandleSetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments)
+    {
+        // Only used for VisualStudio, but we don't support it.
+        return new SetExceptionBreakpointsResponse();
+    }
+
     protected override SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
     {
         var response = new SetBreakpointsResponse();
@@ -625,7 +663,8 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
                 {
                     Id = (int)checkpointResponse.CheckpointNumber,
                     Verified = true,
-                    InstructionReference = CreateMemoryReference(range.StartAddress)
+                    InstructionReference = CreateMemoryReference(range.StartAddress),
+                    Line = sourceBreakpoint.Line,
                 });
 
             }
@@ -1249,7 +1288,6 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
         }
     }
     
-    
     private class C64DebugVariable : Variable
     {
         private readonly Func<C64DebugMachineState, string> _getterValue;
@@ -1403,4 +1441,380 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
             }
         }
     }
+    
+    private abstract class C64Expression
+    {
+        public abstract int Evaluate(C64ExpressionEvaluationContext context);
+    }
+
+    private class C64ExpressionEvaluationContext
+    {
+        public C64ExpressionEvaluationContext(C64DebugMachineState machineState, Dictionary<string, int> labels)
+        {
+            MachineState = machineState;
+            LabelNamesToAddress = labels;
+        }
+
+        public C64DebugMachineState MachineState { get; }
+
+        public Dictionary<string, int> LabelNamesToAddress { get; }
+    }
+
+    private class C64BinaryExpression : C64Expression
+    {
+        public required C64Expression Left { get; init; }
+        public required C64Expression Right { get; init; }
+        public required C64BinaryExpressionKind Kind { get; init; }
+
+        public override int Evaluate(C64ExpressionEvaluationContext context)
+        {
+            var leftValue = Left.Evaluate(context);
+            var rightValue = Right.Evaluate(context);
+            return Kind switch
+            {
+                C64BinaryExpressionKind.Add => leftValue + rightValue,
+                C64BinaryExpressionKind.Subtract => leftValue - rightValue,
+                _ => throw new InvalidOperationException($"Unknown binary expression kind: {Kind}"),
+            };
+        }
+    }
+
+    private class C64Number : C64Expression
+    {
+        public required int Value { get; init; }
+
+        public override int Evaluate(C64ExpressionEvaluationContext context) => Value;
+    }
+
+    private class C64Identifier : C64Expression
+    {
+        public required string Name { get; init; }
+
+        public override int Evaluate(C64ExpressionEvaluationContext context)
+        {
+            switch (Name)
+            {
+                case "PC":
+                    return context.MachineState.PC;
+                case "A":
+                    return context.MachineState.A;
+                case "X":
+                    return context.MachineState.X;
+                case "Y":
+                    return context.MachineState.Y;
+                case "SP":
+                    return context.MachineState.SP;
+                case "SR":
+                    return (int)(byte)context.MachineState.SR;
+                default:
+                    // Check labels
+                    return context.LabelNamesToAddress.GetValueOrDefault(Name, 0);
+            }
+        }
+    }
+
+    private enum C64BinaryExpressionKind
+    {
+        Add,
+        Subtract,
+    }
+    
+    private ref struct C64ExpressionParser
+    {
+        private string _expression = string.Empty;
+        private ReadOnlySpan<char> _span = [];
+        private List<Token> _tokens = [];
+        private int _position;
+
+        public C64ExpressionParser()
+        {
+        }
+        
+        public C64Expression Parse(string expression)
+        {
+            if (string.IsNullOrWhiteSpace(expression))
+            {
+                throw new C64ExpressionException("Expression is empty");
+            }
+
+            _expression = expression;
+            _span = expression.AsSpan();
+            _tokens = Tokenize(expression);
+            _position = 0;
+
+            var expr = ParseExpression();
+
+            if (!IsAtEnd())
+            {
+                var t = Peek();
+                throw new C64ExpressionException($"Unexpected token '{GetLexeme(t)}' at position {t.Start}");
+            }
+
+            return expr;
+        }
+
+        // Grammar:
+        //
+        // expression  -> term ( ( "+" | "-" ) term )*
+        // term        -> unary parenthesis*         <- following parenthesis expressions are discarded
+        // unary       -> ( "-" ) unary | primary
+        // parenthesis  -> "(" expression ")"
+        // primary     -> NUMBER | HEX_NUMBER | IDENTIFIER | parenthesis
+        private C64Expression ParseExpression()
+        {
+            var left = ParseUnary();
+
+            while (!IsAtEnd())
+            {
+                var kind = Peek().Kind;
+                if (kind != TokenKind.Plus && kind != TokenKind.Minus && kind != TokenKind.OpenParen)
+                {
+                    break;
+                }
+
+                Advance(); // consume operator
+
+                var right = ParseUnary();
+                if (kind != TokenKind.OpenParen) // In case of a parenthesis, we skip it
+                {
+                    left = new C64BinaryExpression
+                    {
+                        Left = left,
+                        Right = right,
+                        Kind = kind == TokenKind.Plus
+                            ? C64BinaryExpressionKind.Add
+                            : C64BinaryExpressionKind.Subtract
+                    };
+                }
+            }
+
+            return left;
+        }
+
+        private C64Expression ParseUnary()
+        {
+            if (Match(TokenKind.Minus))
+            {
+                var operand = ParseUnary();
+                // Represent unary minus as 0 - operand
+                return new C64BinaryExpression
+                {
+                    Left = new C64Number { Value = 0 },
+                    Right = operand,
+                    Kind = C64BinaryExpressionKind.Subtract
+                };
+            }
+
+            return ParsePrimary();
+        }
+
+        private C64Expression ParsePrimary()
+        {
+            if (Match(TokenKind.OpenParen))
+            {
+                var expr = ParseExpression();
+                Expect(TokenKind.CloseParen, "Expected ')' to close '('");
+                return expr;
+            }
+
+            if (Check(TokenKind.HexNumber) || Check(TokenKind.Number))
+            {
+                return ParseNumber();
+            }
+
+            if (Check(TokenKind.Identifier))
+            {
+                var t = Advance();
+                var name = GetLexeme(t).ToString();
+                return new C64Identifier { Name = name };
+            }
+
+            if (IsAtEnd())
+            {
+                throw new C64ExpressionException("Unexpected end of expression");
+            }
+
+            var tok = Peek();
+            throw new C64ExpressionException($"Unexpected token '{GetLexeme(tok)}' at position {tok.Start}");
+        }
+
+        private C64Expression ParseNumber()
+        {
+            var t = Advance();
+            var text = GetLexeme(t);
+
+            int value;
+            switch (t.Kind)
+            {
+                case TokenKind.HexNumber:
+                    // Supports "$FF" or "0xFF"
+                    ReadOnlySpan<char> hexDigits = text;
+                    if (hexDigits.Length > 0 && hexDigits[0] == '$')
+                    {
+                        hexDigits = hexDigits[1..];
+                    }
+                    else if (hexDigits.Length > 1 && (hexDigits.StartsWith("0x", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        hexDigits = hexDigits[2..];
+                    }
+
+                    if (!int.TryParse(hexDigits, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value))
+                    {
+                        throw new C64ExpressionException($"Invalid hex number '{text.ToString()}' at position {t.Start}");
+                    }
+                    break;
+
+                case TokenKind.Number:
+                    if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+                    {
+                        throw new C64ExpressionException($"Invalid number '{text.ToString()}' at position {t.Start}");
+                    }
+                    break;
+
+                default:
+                    throw new C64ExpressionException($"Unexpected token '{text.ToString()}' when parsing number");
+            }
+
+            return new C64Number { Value = value };
+        }
+
+        private bool IsAtEnd() => _position >= _tokens.Count;
+
+        private Token Peek() => _tokens[_position];
+
+        private Token Advance()
+        {
+            if (IsAtEnd())
+            {
+                // Synthesize a token at the end for better error message
+                throw new C64ExpressionException("Unexpected end of expression");
+            }
+            return _tokens[_position++];
+        }
+
+        private bool Match(TokenKind kind)
+        {
+            if (Check(kind))
+            {
+                _position++;
+                return true;
+            }
+            return false;
+        }
+
+        private bool Check(TokenKind kind) => !IsAtEnd() && _tokens[_position].Kind == kind;
+
+        private Token Expect(TokenKind kind, string message)
+        {
+            if (Check(kind)) return Advance();
+            if (IsAtEnd())
+            {
+                throw new C64ExpressionException($"{message}. Reached end of expression.");
+            }
+            var t = Peek();
+            throw new C64ExpressionException($"{message}. Found '{GetLexeme(t)}' at position {t.Start}.");
+        }
+
+        private ReadOnlySpan<char> GetLexeme(Token t) => _span.Slice(t.Start, t.Length);
+
+        private List<Token> Tokenize(string expression)
+        {
+            var tokens = new List<Token>();
+            var span = expression.AsSpan();
+            int position = 0;
+            while (position < span.Length)
+            {
+                char c = span[position];
+                if (char.IsWhiteSpace(c))
+                {
+                    position++;
+                    continue;
+                }
+                if (char.IsLetter(c) || c == '_')
+                {
+                    int start = position;
+                    position++;
+                    while (position < span.Length && (char.IsLetterOrDigit(span[position]) || span[position] == '_'))
+                    {
+                        position++;
+                    }
+                    tokens.Add(new Token(TokenKind.Identifier, start, position - start));
+                    continue;
+                }
+                if (c == '$')
+                {
+                    int start = position;
+                    position++;
+                    while (position < span.Length && char.IsAsciiHexDigit(span[position]))
+                    {
+                        position++;
+                    }
+                    tokens.Add(new Token(TokenKind.HexNumber, start, position - start));
+                    continue;
+                }
+                if (char.IsDigit(c))
+                {
+                    if (c == '0' && position + 1 < span.Length && (span[position + 1] == 'x' || span[position + 1] == 'X'))
+                    {
+                        // Hex number starting with 0x
+                        int startHex = position;
+                        position += 2;
+                        while (position < span.Length && char.IsAsciiHexDigit(span[position]))
+                        {
+                            position++;
+                        }
+                        tokens.Add(new Token(TokenKind.HexNumber, startHex, position - startHex));
+                        continue;
+                    }
+
+                    int start = position;
+                    position++;
+                    while (position < span.Length && char.IsDigit(span[position]))
+                    {
+                        position++;
+                    }
+                    tokens.Add(new Token(TokenKind.Number, start, position - start));
+                    continue;
+                }
+                switch (c)
+                {
+                    case '+':
+                        tokens.Add(new Token(TokenKind.Plus, position, 1));
+                        position++;
+                        break;
+                    case '-':
+                        tokens.Add(new Token(TokenKind.Minus, position, 1));
+                        position++;
+                        break;
+                    case '(':
+                        tokens.Add(new Token(TokenKind.OpenParen, position, 1));
+                        position++;
+                        break;
+                    case ')':
+                        tokens.Add(new Token(TokenKind.CloseParen, position, 1));
+                        position++;
+                        break;
+                    default:
+                        throw new C64ExpressionException($"Unexpected character '{c}' at position {position}");
+                }
+            }
+            return tokens;
+        }
+
+        private class C64ExpressionException(string message) : Exception(message);
+
+        private readonly record struct Token(TokenKind Kind, int Start, int Length);
+
+        private enum TokenKind
+        {
+            Identifier,
+            HexNumber,
+            Number,
+            Plus,
+            Minus,
+            OpenParen,
+            CloseParen,
+        }
+    }
 }
+
