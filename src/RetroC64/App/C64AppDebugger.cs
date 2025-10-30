@@ -412,7 +412,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
     protected override InitializeResponse HandleInitializeRequest(InitializeArguments arguments)
     {
         // Detect which debugger (VSCode or VisualStudio) is attaching
-        _isVisualStudioAttached = arguments.AdditionalProperties.TryGetValue("clientID", out var clientIDToken) && clientIDToken.ToString().Equals("visualstudio", StringComparison.OrdinalIgnoreCase);
+        _isVisualStudioAttached = arguments.ClientID is not null && arguments.ClientID.Equals("visualstudio", StringComparison.OrdinalIgnoreCase);
         
         // ⚠️ NOTE: In the specs it says that Initialized event must be sent after the initialize request,
         // but it would complicate the code to send it later asynchronously.
