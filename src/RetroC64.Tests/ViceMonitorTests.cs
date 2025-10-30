@@ -134,7 +134,7 @@ public class ViceMonitorTests
 
         public void Start()
         {
-            var cancellationTokenSource = new CancellationTokenSource(2000);
+            var cancellationTokenSource = new CancellationTokenSource(5000); // Increase for CI
             Start(cancellationTokenSource.Token);
         }
 
