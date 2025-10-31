@@ -5,8 +5,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Asm6502;
+using RetroC64.App;
 
-namespace RetroC64.App;
+namespace RetroC64.Debugger;
 
 internal class C64AssemblerDebugInfoProcessor : C64AppContext
 {

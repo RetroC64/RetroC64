@@ -2,11 +2,13 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
-namespace RetroC64.App;
+using RetroC64.App;
 
-internal class C64AppDebuggerContext : C64AppContext
+namespace RetroC64.Debugger;
+
+internal class C64DebugContext : C64AppContext
 {
-    internal C64AppDebuggerContext(C64AppBuilder builder) : base(builder)
+    internal C64DebugContext(C64AppBuilder builder) : base(builder)
     {
         Log = builder.LogFactory!.CreateLogger($"[gray]DebugC64[/]-{builder.Name}");
     }

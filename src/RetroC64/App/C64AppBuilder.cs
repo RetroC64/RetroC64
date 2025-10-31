@@ -13,6 +13,7 @@ using RetroC64.Vice.Monitor.Commands;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Text;
+using RetroC64.Debugger;
 using XenoAtom.CommandLine;
 
 namespace RetroC64.App;
@@ -212,7 +213,7 @@ public class C64AppBuilder : IC64FileContainer
         var monitor = new ViceMonitor();
 
         // Starts the debugger
-        using var debuggerServer = new C64AppDebuggerServerFactory(this, monitor, _cancellationTokenSource.Token);
+        using var debuggerServer = new C64DebugAdapterFactory(this, monitor, _cancellationTokenSource.Token);
         debuggerServer.Start();
         
         var runner = new ViceRunner()

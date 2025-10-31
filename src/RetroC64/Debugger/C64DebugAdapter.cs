@@ -6,6 +6,7 @@ using Asm6502;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Newtonsoft.Json;
+using RetroC64.App;
 using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
 using RetroC64.Vice.Monitor.Responses;
@@ -14,12 +15,11 @@ using System.Globalization;
 
 // ReSharper disable InconsistentNaming
 
-namespace RetroC64.App;
+namespace RetroC64.Debugger;
 
-internal class C64DebuggerServer : DebugAdapterBase, IDisposable
+internal class C64DebugAdapter : DebugAdapterBase, IDisposable
 {
-    private readonly C64AppBuilder _builder;
-    private readonly C64AppDebuggerContext _context;
+    private readonly C64DebugContext _context;
     private readonly ViceMonitor _monitor;
     private readonly CancellationToken _cancellationToken;
     private readonly C64DebugMachineState _machineState;
@@ -27,23 +27,24 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
     private readonly Dictionary<C64DebugVariableScope, List<C64DebugVariable>> _mapScopeToDebugVariables;
     private readonly Dictionary<string, C64DebugVariable> _mapVariableNameToDebugVariable;
 
-    private readonly Dictionary<uint, C64Breakpoint> _mapBreakpointIdToBreakpoint = new();
+    private readonly Dictionary<uint, C64DebugBreakpoint> _mapBreakpointIdToBreakpoint = new();
 
-    private readonly List<C64Breakpoint> _sourceBreakpoints = new();
-    private readonly List<C64Breakpoint> _dataBreakpoints = new();
-    private readonly List<C64Breakpoint> _instructionBreakpoints = new();
+    private readonly List<C64DebugBreakpoint> _sourceBreakpoints = new();
+    private readonly List<C64DebugBreakpoint> _dataBreakpoints = new();
+    private readonly List<C64DebugBreakpoint> _instructionBreakpoints = new();
 
     private readonly C64AssemblerDebugInfoProcessor _debugInfoProcessor;
+    private readonly List<C64AssemblerDebugMap> _pendingDebugMaps;
     private bool _shuttingDown;
     private bool _isVisualStudioAttached;
 
     private CheckpointResponse? _breakpointHit;
     
-    public C64DebuggerServer(C64AppBuilder builder, ViceMonitor monitor, CancellationToken cancellationToken)
+    public C64DebugAdapter(C64AppBuilder builder, ViceMonitor monitor, CancellationToken cancellationToken)
     {
-        _builder = builder;
-        _context = new C64AppDebuggerContext(_builder);
-        _debugInfoProcessor = new C64AssemblerDebugInfoProcessor(_builder);
+        _context = new C64DebugContext(builder);
+        _debugInfoProcessor = new C64AssemblerDebugInfoProcessor(builder);
+        _pendingDebugMaps = new();
         _monitor = monitor;
         _cancellationToken = cancellationToken;
         _machineState = new();
@@ -156,23 +157,61 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
     public bool Enabled { get; private set; }
 
-    public void SetDebugMap(C64AssemblerDebugMap? debugMap)
+    public void AddDebugMap(C64AssemblerDebugMap? debugMap)
     {
-        _debugInfoProcessor.Reset(); // TODO: temp before we support multiple debug maps
-        _debugInfoProcessor.AddDebugMap(debugMap);
-
-        // Update the user allocated zero-page addresses names
-        _machineState.ZpAddresses.Clear();
-        if (debugMap is not null)
+        if (debugMap is null)
         {
-            foreach (var item in debugMap.ZpLabels)
+            return;
+        }
+
+        // As we are called from another thread on this method
+        // we need to stage the debug maps so that they are picked up
+        // by GetDebugInfoProcessor();
+        lock (_pendingDebugMaps)
+        {
+            _pendingDebugMaps.Add(debugMap);
+        }
+    }
+
+    private C64AssemblerDebugInfoProcessor GetDebugInfoProcessor()
+    {
+        List<C64AssemblerDebugMap>? debugMaps = null;
+        lock (_pendingDebugMaps)
+        {
+            if (_pendingDebugMaps.Count > 0)
             {
-                if (!string.IsNullOrEmpty(item.Name))
+                debugMaps = new List<C64AssemblerDebugMap>();
+                debugMaps.AddRange(_pendingDebugMaps);
+                _pendingDebugMaps.Clear();
+            }
+        }
+
+        // Update the debug info processor if necessary
+        if (debugMaps is not null)
+        {
+            Console.WriteLine("GetDebugInfoProcessor updated");
+
+            _debugInfoProcessor.Reset(); // Add support for multiples
+            foreach (var debugMap in debugMaps)
+            {
+                _debugInfoProcessor.AddDebugMap(debugMap);
+            }
+
+            // Update the user allocated zero-page addresses names
+            _machineState.ZpAddresses.Clear();
+            foreach (var debugMap in debugMaps)
+            {
+                foreach (var item in debugMap.ZpLabels)
                 {
-                    _machineState.ZpAddresses.Add(item.Address, item.Name);
+                    if (!string.IsNullOrEmpty(item.Name))
+                    {
+                        _machineState.ZpAddresses.Add(item.Address, item.Name);
+                    }
                 }
             }
         }
+
+        return _debugInfoProcessor;
     }
 
     protected override SourceResponse HandleSourceRequest(SourceArguments arguments)
@@ -254,7 +293,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
         
         address = (ushort)(address + (arguments.Offset ?? 0));
 
-        if (!_debugInfoProcessor.TryFindCodeRegion(address, out var memoryRange))
+        if (!GetDebugInfoProcessor().TryFindCodeRegion(address, out var memoryRange))
         {
             memoryRange = (address, 0xFFFF);
         }
@@ -378,9 +417,9 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
         try
         {
-            var parser = new C64ExpressionParser();
+            var parser = new C64DebugExpressionParser();
             var expr = parser.Parse(expression);
-            var context = new C64ExpressionEvaluationContext(_machineState, _debugInfoProcessor.Labels);
+            var context = new C64DebugExpressionEvaluationContext(_machineState, GetDebugInfoProcessor().Labels);
             var result = expr.Evaluate(context);
 
             return new EvaluateResponse()
@@ -413,12 +452,13 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
     {
         // Detect which debugger (VSCode or VisualStudio) is attaching
         _isVisualStudioAttached = arguments.ClientID is not null && arguments.ClientID.Equals("visualstudio", StringComparison.OrdinalIgnoreCase);
-        
+
         // ⚠️ NOTE: In the specs it says that Initialized event must be sent after the initialize request,
         // but it would complicate the code to send it later asynchronously.
         // It seems to be ok, so keep it here for simplicity.
         Protocol.SendEvent(new InitializedEvent());
 
+        // We need to capture the state as Visual Studio is setting breakpoints right after initialization
         LocalSuspendMonitor(() =>
         {
             CaptureMachineState();
@@ -625,7 +665,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
             foreach (var sourceBreakpoint in arguments.Breakpoints)
             {
-                if (!_debugInfoProcessor.TryGetAddressFromFileAndLineNumber(arguments.Source.Path, sourceBreakpoint.Line, out var range))
+                if (!GetDebugInfoProcessor().TryGetAddressFromFileAndLineNumber(arguments.Source.Path, sourceBreakpoint.Line, out var range))
                 {
                     response.Breakpoints.Add(new Breakpoint()
                     {
@@ -650,11 +690,8 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
                     _monitor.SetCondition(checkpointResponse.CheckpointNumber, sourceBreakpoint.Condition, _cancellationToken);
                 }
 
-                var c64Breakpoint = new C64Breakpoint()
-                {
-                    BreakpointRequest = sourceBreakpoint,
-                    Breakpoint = checkpointResponse,
-                };
+                var c64Breakpoint = new C64DebugBreakpoint(sourceBreakpoint, checkpointResponse);
+
                 _mapBreakpointIdToBreakpoint[checkpointResponse.CheckpointNumber] = c64Breakpoint;
                 _sourceBreakpoints.Add(c64Breakpoint);
 
@@ -672,8 +709,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
         return response;
     }
-
-
+    
     protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
     {
         var response = new DataBreakpointInfoResponse();
@@ -734,11 +770,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
                         _monitor.SetCondition(checkpointResponse.CheckpointNumber, dataBreakpoint.Condition, _cancellationToken);
                     }
 
-                    var c64Breakpoint = new C64Breakpoint()
-                    {
-                        BreakpointRequest = dataBreakpoint,
-                        Breakpoint = checkpointResponse,
-                    };
+                    var c64Breakpoint = new C64DebugBreakpoint(dataBreakpoint, checkpointResponse);
 
                     _mapBreakpointIdToBreakpoint[checkpointResponse.CheckpointNumber] = c64Breakpoint;
                     _dataBreakpoints.Add(c64Breakpoint);
@@ -784,11 +816,8 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
                     Temporary = false
                 });
 
-                var c64Breakpoint = new C64Breakpoint()
-                {
-                    BreakpointRequest = instructionBreakpoint,
-                    Breakpoint = checkpointResponse,
-                };
+                var c64Breakpoint = new C64DebugBreakpoint(instructionBreakpoint, checkpointResponse);
+                
                 _mapBreakpointIdToBreakpoint[checkpointResponse.CheckpointNumber] = c64Breakpoint;
                 _instructionBreakpoints.Add(c64Breakpoint);
 
@@ -831,7 +860,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
 
         var response = new StackTraceResponse();
 
-        _debugInfoProcessor.TryFindFileAndLineNumber(_machineState.PC, out var filePath, out int lineNumber);
+        GetDebugInfoProcessor().TryFindFileAndLineNumber(_machineState.PC, out var filePath, out int lineNumber);
 
         Mos6502Instruction.TryDecode(_machineState.Ram.AsSpan().Slice(_machineState.PC), out var instruction, out _);
 
@@ -992,7 +1021,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
         }
     }
 
-    private void DeleteBreakpoints(List<C64Breakpoint> breakpoints)
+    private void DeleteBreakpoints(List<C64DebugBreakpoint> breakpoints)
     {
         foreach (var item in breakpoints)
         {
@@ -1020,7 +1049,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
         return false;
     }
     
-    private static bool TryParseTextAsInt(string text, out int address)
+    internal static bool TryParseTextAsInt(string text, out int address)
     {
         var span = text.AsSpan();
 
@@ -1057,7 +1086,7 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
         {
             if (_mapBreakpointIdToBreakpoint.TryGetValue(_breakpointHit.CheckpointNumber, out var c64Breakpoint))
             {
-                var reason = c64Breakpoint.GetBreakpointStopReason();
+                var reason = c64Breakpoint.StopReason;
                 _context.Debug($"Breakpoint hit (kind: {reason}) at ${_breakpointHit.StartAddress:x4}");
                 NotifyStopped(reason, c64Breakpoint.Breakpoint.CheckpointNumber);
             }
@@ -1205,616 +1234,4 @@ internal class C64DebuggerServer : DebugAdapterBase, IDisposable
         new(C64DebugVariableScope.SidRegisters, 0xd41b, "SID: Oscillator 3 (read)"),
         new(C64DebugVariableScope.SidRegisters, 0xd41c, "SID: Envelope 3 (read)"),
     ];
-
-    private enum C64DebugVariableScope
-    {
-        None,
-        CpuRegisters,
-        CpuFlags,
-        Stack,
-        ZeroPage,
-        Misc,
-        VicRegisters,
-        SpriteRegisters,
-        SidRegisters,
-    }
-    
-    private class C64DebugMachineState
-    {
-        public byte[] Ram { get; set; } = [];
-
-        public ushort PC { get; private set; }
-
-        public byte A { get; private set; }
-
-        public byte X { get; private set; }
-
-        public byte Y { get; private set; }
-
-        public byte SP { get; private set; }
-
-        public Mos6502CpuFlags SR { get; private set; }
-
-        public ushort RasterLine { get; private set; }
-
-        public ushort RasterCycle { get; private set; }
-
-        public Dictionary<byte, string> ZpAddresses { get; } = new();
-
-        public void UpdateRegisters(RegisterValue[] registers)
-        {
-            for (int i = 0; i < registers.Length; i++)
-            {
-                var reg = registers[i];
-                switch (reg.RegisterId)
-                {
-                    case RegisterId.PC: PC = (ushort)reg.Value; break;
-                    case RegisterId.A: A = (byte)reg.Value; break;
-                    case RegisterId.X: X = (byte)reg.Value; break;
-                    case RegisterId.Y: Y = (byte)reg.Value; break;
-                    case RegisterId.SP: SP = (byte)reg.Value; break;
-                    case RegisterId.FLAGS: SR = (Mos6502CpuFlags)(byte)reg.Value; break;
-                    case RegisterId.RasterLine: RasterLine = (ushort)reg.Value; break;
-                    case RegisterId.RasterCycle: RasterCycle = (ushort)reg.Value; break;
-                }
-            }
-        }
-    }
-
-    private class C64Breakpoint
-    {
-        public required object BreakpointRequest { get; init; }
-
-        public required CheckpointResponse Breakpoint { get; init; }
-
-        public StoppedEvent.ReasonValue GetBreakpointStopReason()
-        {
-            if (BreakpointRequest is SourceBreakpoint)
-            {
-                return StoppedEvent.ReasonValue.Breakpoint;
-            }
-
-            if (BreakpointRequest is InstructionBreakpoint)
-            {
-                return StoppedEvent.ReasonValue.Breakpoint;
-            }
-
-            if (BreakpointRequest is DataBreakpoint)
-            {
-                return StoppedEvent.ReasonValue.DataBreakpoint;
-            }
-
-            return StoppedEvent.ReasonValue.Breakpoint;
-        }
-    }
-    
-    private class C64DebugVariable : Variable
-    {
-        private readonly Func<C64DebugMachineState, string> _getterValue;
-        private readonly Action<ViceMonitor, C64DebugMachineState, ushort>? _setterValue;
-        private readonly int? _index;
-        private readonly string? _alias;
-        private readonly ushort _address;
-        private readonly bool _hasAddress;
-
-        public C64DebugVariable(C64DebugVariableScope scope, string name, Func<C64DebugMachineState, string> getter)
-        {
-            Scope = scope;
-            Name = name;
-            _getterValue = getter;
-        }
-
-        public C64DebugVariable(C64DebugVariableScope scope, int index, string name, Func<C64DebugMachineState, string> getter) : this(scope, name, getter)
-        {
-            _index = index;
-
-            if (scope == C64DebugVariableScope.CpuFlags)
-            {
-                _setterValue = (monitor, state, value) =>
-                {
-                    var newValue = (byte)state.SR;
-                    newValue &= (byte)~(1 << _index.Value);
-                    newValue |= (byte)((value & 1) << _index.Value);
-
-                    RegisterValue[] newRegs = [new(RegisterId.FLAGS, newValue)];
-                    monitor.SetRegisters(newRegs);
-                    state.UpdateRegisters(newRegs);
-                };
-            }
-            else
-            {
-                throw new ArgumentException($"Scope {scope} not handled for custom index");
-            }
-        }
-
-        public C64DebugVariable(C64DebugVariableScope scope, string name, Func<C64DebugMachineState, string> getter, RegisterId registerId) : this(scope, name, getter)
-        {
-            _setterValue = (monitor, state, value) =>
-            {
-                RegisterValue[] newRegs = [new(registerId, value)];
-                monitor.SetRegisters(newRegs);
-                state.UpdateRegisters(newRegs);
-            };
-        }
-        
-        public C64DebugVariable(C64DebugVariableScope scope, ushort address, string? alias = null)
-        {
-            Scope = scope;
-            _address = address;
-            _alias = alias;
-            _hasAddress = true;
-
-            UpdateNameFromAddress(null);
-
-            _getterValue = state =>
-            {
-                UpdateNameFromAddress(state);
-                var value = state.Ram[address];
-                return $"${value:x2} ({value})";
-            };
-
-            _setterValue = (monitor, state, value) =>
-            {
-                var b = (byte)(value & 0xFF);
-                if (address < 2)
-                {
-                    RegisterValue[] newRegs = [new(address == 0 ? RegisterId.Zero : RegisterId.One, value)];
-                    monitor.SetRegisters(newRegs);
-                    state.UpdateRegisters(newRegs);
-                }
-                else
-                {
-                    monitor.SetMemory(new MemorySetCommand()
-                    {
-                        StartAddress = address,
-                        Data = new[] { b }
-                    });
-                }
-                state.Ram[address] = b;
-            };
-        }
-
-        [JsonIgnore]
-        public ushort Address => _address;
-
-        [JsonIgnore]
-        public bool HasAddress => _hasAddress;
-
-        [JsonIgnore]
-        public bool HasZpName { get; private set; }
-
-        [JsonIgnore]
-        public C64DebugVariableScope Scope { get; }
-
-        [JsonIgnore]
-        public bool CanWrite => _setterValue != null;
-
-        public void ReadFromMachineState(C64DebugMachineState state)
-        {
-            Value = _getterValue(state);
-        }
-        
-        public void WriteToMachineState(ViceMonitor monitor, C64DebugMachineState state, string text)
-        {
-            if (_setterValue != null)
-            {
-                if (TryParseTextAsInt(text, out var value))
-                {
-                    _setterValue(monitor, state, (ushort)value);
-                    // Update from the set value
-                    Value = _getterValue(state);
-                }
-                else
-                {
-                    throw new InvalidOperationException($"Cannot parse value `{text}` as integer");
-                }
-            }
-            else
-            {
-                throw new InvalidOperationException($"Variable {Name} is read-only");
-            }
-        }
-        
-        private void UpdateNameFromAddress(C64DebugMachineState? state)
-        {
-            if (_address < 0x100)
-            {
-                if (state is not null && state.ZpAddresses.TryGetValue((byte)_address, out var name))
-                {
-                    HasZpName = true;
-                    Name = $"${_address:x2} ({name})";
-                }
-                else
-                {
-                    HasZpName = false;
-                    Name = $"${_address:x2}";
-                }
-            }
-            else if (_address >= 0x100 && _address <= 0x1FF)
-            {
-                var sp = (byte)(_address - 0x100);
-                Name = state is not null && state.SP == sp ? $"${sp:x2} <- SP" : $"${sp:x2}";
-            }
-            else
-            {
-                Name = _alias is null ? $"${_address:x4}" : $"{_alias} (${_address:x4})";
-            }
-        }
-    }
-    
-    private abstract class C64Expression
-    {
-        public abstract int Evaluate(C64ExpressionEvaluationContext context);
-    }
-
-    private class C64ExpressionEvaluationContext
-    {
-        public C64ExpressionEvaluationContext(C64DebugMachineState machineState, Dictionary<string, int> labels)
-        {
-            MachineState = machineState;
-            LabelNamesToAddress = labels;
-        }
-
-        public C64DebugMachineState MachineState { get; }
-
-        public Dictionary<string, int> LabelNamesToAddress { get; }
-    }
-
-    private class C64BinaryExpression : C64Expression
-    {
-        public required C64Expression Left { get; init; }
-        public required C64Expression Right { get; init; }
-        public required C64BinaryExpressionKind Kind { get; init; }
-
-        public override int Evaluate(C64ExpressionEvaluationContext context)
-        {
-            var leftValue = Left.Evaluate(context);
-            var rightValue = Right.Evaluate(context);
-            return Kind switch
-            {
-                C64BinaryExpressionKind.Add => leftValue + rightValue,
-                C64BinaryExpressionKind.Subtract => leftValue - rightValue,
-                _ => throw new InvalidOperationException($"Unknown binary expression kind: {Kind}"),
-            };
-        }
-    }
-
-    private class C64Number : C64Expression
-    {
-        public required int Value { get; init; }
-
-        public override int Evaluate(C64ExpressionEvaluationContext context) => Value;
-    }
-
-    private class C64Identifier : C64Expression
-    {
-        public required string Name { get; init; }
-
-        public override int Evaluate(C64ExpressionEvaluationContext context)
-        {
-            switch (Name)
-            {
-                case "PC":
-                    return context.MachineState.PC;
-                case "A":
-                    return context.MachineState.A;
-                case "X":
-                    return context.MachineState.X;
-                case "Y":
-                    return context.MachineState.Y;
-                case "SP":
-                    return context.MachineState.SP;
-                case "SR":
-                    return (int)(byte)context.MachineState.SR;
-                default:
-                    // Check labels
-                    return context.LabelNamesToAddress.GetValueOrDefault(Name, 0);
-            }
-        }
-    }
-
-    private enum C64BinaryExpressionKind
-    {
-        Add,
-        Subtract,
-    }
-    
-    private ref struct C64ExpressionParser
-    {
-        private string _expression = string.Empty;
-        private ReadOnlySpan<char> _span = [];
-        private List<Token> _tokens = [];
-        private int _position;
-
-        public C64ExpressionParser()
-        {
-        }
-        
-        public C64Expression Parse(string expression)
-        {
-            if (string.IsNullOrWhiteSpace(expression))
-            {
-                throw new C64ExpressionException("Expression is empty");
-            }
-
-            _expression = expression;
-            _span = expression.AsSpan();
-            _tokens = Tokenize(expression);
-            _position = 0;
-
-            var expr = ParseExpression();
-
-            if (!IsAtEnd())
-            {
-                var t = Peek();
-                throw new C64ExpressionException($"Unexpected token '{GetLexeme(t)}' at position {t.Start}");
-            }
-
-            return expr;
-        }
-
-        // Grammar:
-        //
-        // expression  -> term ( ( "+" | "-" ) term )*
-        // term        -> unary parenthesis*         <- following parenthesis expressions are discarded
-        // unary       -> ( "-" ) unary | primary
-        // parenthesis  -> "(" expression ")"
-        // primary     -> NUMBER | HEX_NUMBER | IDENTIFIER | parenthesis
-        private C64Expression ParseExpression()
-        {
-            var left = ParseUnary();
-
-            while (!IsAtEnd())
-            {
-                var kind = Peek().Kind;
-                if (kind != TokenKind.Plus && kind != TokenKind.Minus && kind != TokenKind.OpenParen)
-                {
-                    break;
-                }
-
-                Advance(); // consume operator
-
-                var right = ParseUnary();
-                if (kind != TokenKind.OpenParen) // In case of a parenthesis, we skip it
-                {
-                    left = new C64BinaryExpression
-                    {
-                        Left = left,
-                        Right = right,
-                        Kind = kind == TokenKind.Plus
-                            ? C64BinaryExpressionKind.Add
-                            : C64BinaryExpressionKind.Subtract
-                    };
-                }
-            }
-
-            return left;
-        }
-
-        private C64Expression ParseUnary()
-        {
-            if (Match(TokenKind.Minus))
-            {
-                var operand = ParseUnary();
-                // Represent unary minus as 0 - operand
-                return new C64BinaryExpression
-                {
-                    Left = new C64Number { Value = 0 },
-                    Right = operand,
-                    Kind = C64BinaryExpressionKind.Subtract
-                };
-            }
-
-            return ParsePrimary();
-        }
-
-        private C64Expression ParsePrimary()
-        {
-            if (Match(TokenKind.OpenParen))
-            {
-                var expr = ParseExpression();
-                Expect(TokenKind.CloseParen, "Expected ')' to close '('");
-                return expr;
-            }
-
-            if (Check(TokenKind.HexNumber) || Check(TokenKind.Number))
-            {
-                return ParseNumber();
-            }
-
-            if (Check(TokenKind.Identifier))
-            {
-                var t = Advance();
-                var name = GetLexeme(t).ToString();
-                return new C64Identifier { Name = name };
-            }
-
-            if (IsAtEnd())
-            {
-                throw new C64ExpressionException("Unexpected end of expression");
-            }
-
-            var tok = Peek();
-            throw new C64ExpressionException($"Unexpected token '{GetLexeme(tok)}' at position {tok.Start}");
-        }
-
-        private C64Expression ParseNumber()
-        {
-            var t = Advance();
-            var text = GetLexeme(t);
-
-            int value;
-            switch (t.Kind)
-            {
-                case TokenKind.HexNumber:
-                    // Supports "$FF" or "0xFF"
-                    ReadOnlySpan<char> hexDigits = text;
-                    if (hexDigits.Length > 0 && hexDigits[0] == '$')
-                    {
-                        hexDigits = hexDigits[1..];
-                    }
-                    else if (hexDigits.Length > 1 && (hexDigits.StartsWith("0x", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        hexDigits = hexDigits[2..];
-                    }
-
-                    if (!int.TryParse(hexDigits, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value))
-                    {
-                        throw new C64ExpressionException($"Invalid hex number '{text.ToString()}' at position {t.Start}");
-                    }
-                    break;
-
-                case TokenKind.Number:
-                    if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
-                    {
-                        throw new C64ExpressionException($"Invalid number '{text.ToString()}' at position {t.Start}");
-                    }
-                    break;
-
-                default:
-                    throw new C64ExpressionException($"Unexpected token '{text.ToString()}' when parsing number");
-            }
-
-            return new C64Number { Value = value };
-        }
-
-        private bool IsAtEnd() => _position >= _tokens.Count;
-
-        private Token Peek() => _tokens[_position];
-
-        private Token Advance()
-        {
-            if (IsAtEnd())
-            {
-                // Synthesize a token at the end for better error message
-                throw new C64ExpressionException("Unexpected end of expression");
-            }
-            return _tokens[_position++];
-        }
-
-        private bool Match(TokenKind kind)
-        {
-            if (Check(kind))
-            {
-                _position++;
-                return true;
-            }
-            return false;
-        }
-
-        private bool Check(TokenKind kind) => !IsAtEnd() && _tokens[_position].Kind == kind;
-
-        private Token Expect(TokenKind kind, string message)
-        {
-            if (Check(kind)) return Advance();
-            if (IsAtEnd())
-            {
-                throw new C64ExpressionException($"{message}. Reached end of expression.");
-            }
-            var t = Peek();
-            throw new C64ExpressionException($"{message}. Found '{GetLexeme(t)}' at position {t.Start}.");
-        }
-
-        private ReadOnlySpan<char> GetLexeme(Token t) => _span.Slice(t.Start, t.Length);
-
-        private List<Token> Tokenize(string expression)
-        {
-            var tokens = new List<Token>();
-            var span = expression.AsSpan();
-            int position = 0;
-            while (position < span.Length)
-            {
-                char c = span[position];
-                if (char.IsWhiteSpace(c))
-                {
-                    position++;
-                    continue;
-                }
-                if (char.IsLetter(c) || c == '_')
-                {
-                    int start = position;
-                    position++;
-                    while (position < span.Length && (char.IsLetterOrDigit(span[position]) || span[position] == '_'))
-                    {
-                        position++;
-                    }
-                    tokens.Add(new Token(TokenKind.Identifier, start, position - start));
-                    continue;
-                }
-                if (c == '$')
-                {
-                    int start = position;
-                    position++;
-                    while (position < span.Length && char.IsAsciiHexDigit(span[position]))
-                    {
-                        position++;
-                    }
-                    tokens.Add(new Token(TokenKind.HexNumber, start, position - start));
-                    continue;
-                }
-                if (char.IsDigit(c))
-                {
-                    if (c == '0' && position + 1 < span.Length && (span[position + 1] == 'x' || span[position + 1] == 'X'))
-                    {
-                        // Hex number starting with 0x
-                        int startHex = position;
-                        position += 2;
-                        while (position < span.Length && char.IsAsciiHexDigit(span[position]))
-                        {
-                            position++;
-                        }
-                        tokens.Add(new Token(TokenKind.HexNumber, startHex, position - startHex));
-                        continue;
-                    }
-
-                    int start = position;
-                    position++;
-                    while (position < span.Length && char.IsDigit(span[position]))
-                    {
-                        position++;
-                    }
-                    tokens.Add(new Token(TokenKind.Number, start, position - start));
-                    continue;
-                }
-                switch (c)
-                {
-                    case '+':
-                        tokens.Add(new Token(TokenKind.Plus, position, 1));
-                        position++;
-                        break;
-                    case '-':
-                        tokens.Add(new Token(TokenKind.Minus, position, 1));
-                        position++;
-                        break;
-                    case '(':
-                        tokens.Add(new Token(TokenKind.OpenParen, position, 1));
-                        position++;
-                        break;
-                    case ')':
-                        tokens.Add(new Token(TokenKind.CloseParen, position, 1));
-                        position++;
-                        break;
-                    default:
-                        throw new C64ExpressionException($"Unexpected character '{c}' at position {position}");
-                }
-            }
-            return tokens;
-        }
-
-        private class C64ExpressionException(string message) : Exception(message);
-
-        private readonly record struct Token(TokenKind Kind, int Start, int Length);
-
-        private enum TokenKind
-        {
-            Identifier,
-            HexNumber,
-            Number,
-            Plus,
-            Minus,
-            OpenParen,
-            CloseParen,
-        }
-    }
 }
-

@@ -3,25 +3,26 @@
 // See license.txt file in the project root for full license information.
 
 using Microsoft.Extensions.Logging;
+using RetroC64.App;
 using RetroC64.Vice.Monitor;
 using System.Net.Sockets;
 
-namespace RetroC64.App;
+namespace RetroC64.Debugger;
 
-internal class C64AppDebuggerServerFactory : IDisposable
+internal class C64DebugAdapterFactory : IDisposable
 {
     private readonly C64AppBuilder _builder;
-    private readonly C64AppDebuggerContext _context;
+    private readonly C64DebugContext _context;
     private readonly ViceMonitor _monitor;
     private readonly CancellationToken _cancellationToken;
     private Task? _serverTask;
-    private C64DebuggerServer? _debugServer;
+    private C64DebugAdapter? _debugServer;
     private C64AssemblerDebugMap? _currentDebugMap;
 
-    public C64AppDebuggerServerFactory(C64AppBuilder builder, ViceMonitor monitor, CancellationToken cancellationToken)
+    public C64DebugAdapterFactory(C64AppBuilder builder, ViceMonitor monitor, CancellationToken cancellationToken)
     {
         _builder = builder;
-        _context = new C64AppDebuggerContext(_builder);
+        _context = new C64DebugContext(_builder);
         _monitor = monitor;
         _cancellationToken = cancellationToken;
     }
@@ -46,7 +47,7 @@ internal class C64AppDebuggerServerFactory : IDisposable
         _currentDebugMap = debugMap;
 
         // TODO: This is not thread-safe
-        _debugServer?.SetDebugMap(debugMap);
+        _debugServer?.AddDebugMap(debugMap);
     }
 
     private async Task DebuggerThread()
@@ -54,8 +55,7 @@ internal class C64AppDebuggerServerFactory : IDisposable
         var port = _builder.Settings.DebugAdapterProtocolPort;
         using var tcpListener = new TcpListener(System.Net.IPAddress.Loopback, port);
         tcpListener.Start();
-
-
+        
         while (!_cancellationToken.IsCancellationRequested)
         {
             try
@@ -64,11 +64,11 @@ internal class C64AppDebuggerServerFactory : IDisposable
                 using var socket = await tcpListener.AcceptSocketAsync(_cancellationToken).ConfigureAwait(false);
                 await using (var io = new NetworkStream(socket))
                 {
-                    var debugServer = new C64DebuggerServer(_builder, _monitor, _cancellationToken);
+                    var debugServer = new C64DebugAdapter(_builder, _monitor, _cancellationToken);
                     _debugServer = debugServer;
                     try
                     {
-                        debugServer.SetDebugMap(_currentDebugMap); // In case it was set before connection
+                        debugServer.AddDebugMap(_currentDebugMap); // In case it was set before connection
                         await debugServer.Run(io).ConfigureAwait(false); // If Run becomes async in the future, await it here.
                     }
                     finally
