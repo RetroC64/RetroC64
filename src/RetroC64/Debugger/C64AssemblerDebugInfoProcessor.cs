@@ -3,7 +3,6 @@
 // See license.txt file in the project root for full license information.
 
 using Asm6502;
-using Microsoft.Extensions.Primitives;
 using RetroC64.App;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
