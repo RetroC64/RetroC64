@@ -50,6 +50,16 @@ internal class C64DebugVariable : Variable
 
     public C64DebugVariable(C64DebugVariableScope scope, string name, Func<C64DebugMachineState, string> getter, RegisterId registerId) : this(scope, name, getter)
     {
+        // Special case for PC to set memory reference
+        if (registerId == RegisterId.PC)
+        {
+            _getterValue = state =>
+            {
+                MemoryReference = $"0x{state.PC:x4}";
+                return getter(state);
+            };
+        }
+
         _setterValue = (monitor, state, value) =>
         {
             RegisterValue[] newRegs = [new(registerId, value)];
@@ -154,11 +164,11 @@ internal class C64DebugVariable : Variable
         else if (_address >= 0x100 && _address <= 0x1FF)
         {
             var sp = (byte)(_address - 0x100);
-            Name = state is not null && state.SP == sp ? $"${sp:x2} <- SP" : $"${sp:x2}";
+            Name = state is not null && state.SP == sp ? $"${sp:x2} (SP)" : $"${sp:x2}";
         }
         else
         {
-            Name = _alias is null ? $"${_address:x4}" : $"{_alias} (${_address:x4})";
+            Name = _alias is null ? $"${_address:x4}" : $"${_address:x4} ({_alias})";
         }
     }
 }

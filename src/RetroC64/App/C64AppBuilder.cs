@@ -99,64 +99,9 @@ public class C64AppBuilder : IC64FileContainer
     /// <returns>Exit code.</returns>
     public async Task<int> Run(string[] args)
     {
-        int width = 120;
-        int optionWidth = 40;
-        if (!Console.IsOutputRedirected)
-        {
-            try
-            {
-                width = Math.Min(120, Console.WindowWidth);
-                optionWidth = Math.Min(29, width / 3);
-            }
-            catch
-            {
-                // Ignore
-            }
-        }
-
-        return await CommandLine.RunAsync(args, new CommandRunConfig(width, optionWidth));
-    }
-
-    private void EnsureLogFactory()
-    {
-        if (_logFactory is not null) return;
-
-        _logFactory = LoggerFactory.Create(configure =>
-            {
-                var ansiConsoleSettings = IsDotNetWatch
-                    ? new AnsiConsoleSettings()
-                    {
-                        Ansi = AnsiSupport.Yes,
-                        ColorSystem = ColorSystemSupport.TrueColor,
-                        Out = new ForceAnsiConsoleOutput(Console.Out),
-                    }
-                    : new AnsiConsoleSettings()
-                    {
-                        Ansi = AnsiSupport.Detect,
-                        ColorSystem = ColorSystemSupport.Detect,
-                        Out = new AnsiConsoleOutput(Console.Out),
-                    };
-
-                configure.AddSpectreConsole(new SpectreConsoleLoggerOptions()
-                {
-                    IncludeEventId = false,
-                    IncludeNewLineBeforeMessage = false,
-                    IncludeTimestamp = true,
-                    ConsoleSettings = ansiConsoleSettings,
-                    TimestampFormat = "HH:mm:ss.fff",
-                    ConfigureConsole = console =>
-                    {
-                        // Use the same console for Spectre.Console static AnsiConsole
-                        AnsiConsole.Console = console;
-                    }
-                });
-
-                // Change the log level
-                configure.SetMinimumLevel(Settings.LogLevel);
-            }
-        );
-
-        _log = _logFactory.CreateLogger($"[gray]RetroC64[/]-{Name}");
+        int width = GetConsoleMinWidth();
+        int optionWidth = width / 3;
+        return await CommandLine.RunAsync(args, new CommandRunConfig(GetConsoleMinWidth(), optionWidth));
     }
 
     /// <summary>
@@ -214,7 +159,6 @@ public class C64AppBuilder : IC64FileContainer
 
         // Starts the debugger
         using var debuggerServer = new C64DebugAdapterFactory(this, monitor, _cancellationTokenSource.Token);
-        debuggerServer.Start();
         
         var runner = new ViceRunner()
         {
@@ -281,6 +225,11 @@ public class C64AppBuilder : IC64FileContainer
 
                             monitor.Connect();
 
+                            if (!debuggerServer.IsRunning)
+                            {
+                                debuggerServer.Start();
+                            }
+
                             _isLiveFileAutoStarted = false;
                             _isViceRunning = runner.IsRunning;
                         }
@@ -299,16 +248,14 @@ public class C64AppBuilder : IC64FileContainer
 
                     if (_buildGeneratedFilesForVice.Count > 0)
                     {
-                        var fileToLaunch = _buildGeneratedFilesForVice[0];
-
-                        var debugMap = fileToLaunch.DebugMap;
+                        var (fileName, debugMap) = _buildGeneratedFilesForVice[0];
                         debuggerServer.SetDebugMap(debugMap);
 
                         if (!_isLiveFileAutoStarted || _customCodeReloadAction is null)
                         {
                             monitor.Autostart(new AutostartCommand()
                             {
-                                Filename = fileToLaunch.FileName,
+                                Filename = fileName,
                                 RunAfterLoading = true
                             });
 
@@ -318,6 +265,8 @@ public class C64AppBuilder : IC64FileContainer
                         {
                             await _customCodeReloadAction(monitor);
                         }
+
+                        debuggerServer.ResumeAndInvalidate();
                     }
 
                     WaitForHotReload();
@@ -356,6 +305,84 @@ public class C64AppBuilder : IC64FileContainer
                 // ignore
             }
         }
+    }
+
+    private void EnsureLogFactory()
+    {
+        if (_logFactory is not null) return;
+
+        _logFactory = LoggerFactory.Create(configure =>
+            {
+                var ansiConsoleSettings = IsDotNetWatch
+                    ? new AnsiConsoleSettings()
+                    {
+                        Ansi = AnsiSupport.Yes,
+                        ColorSystem = ColorSystemSupport.TrueColor,
+                        Out = new ForceAnsiConsoleOutput(Console.Out, GetConsoleMinWidth(), GetConsoleMinHeight()),
+                    }
+                    : new AnsiConsoleSettings()
+                    {
+                        Ansi = AnsiSupport.Detect,
+                        ColorSystem = ColorSystemSupport.Detect,
+                        Out = new AnsiConsoleOutput(Console.Out),
+                    };
+
+                configure.AddSpectreConsole(new SpectreConsoleLoggerOptions()
+                {
+                    IncludeEventId = false,
+                    IncludeNewLineBeforeMessage = false,
+                    IncludeTimestamp = true,
+                    ConsoleSettings = ansiConsoleSettings,
+                    TimestampFormat = "HH:mm:ss.fff",
+                    ConfigureConsole = console =>
+                    {
+                        // Use the same console for Spectre.Console static AnsiConsole
+                        AnsiConsole.Console = console;
+                    }
+                });
+
+                // Change the log level
+                configure.SetMinimumLevel(Settings.LogLevel);
+            }
+        );
+
+        _log = _logFactory.CreateLogger($"[gray]RetroC64[/]-{Name}");
+    }
+
+    private int GetConsoleMinWidth()
+    {
+        int width = int.MaxValue;
+        if (!Console.IsOutputRedirected)
+        {
+            try
+            {
+                width = Math.Min(int.MaxValue, Console.WindowWidth);
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+
+        return width;
+    }
+
+    private int GetConsoleMinHeight()
+    {
+        int height = 80;
+        if (!Console.IsOutputRedirected)
+        {
+            try
+            {
+                height = Math.Min(80, Console.WindowHeight);
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+
+        return height;
     }
     
     private bool TryInitializeAppElements()
@@ -514,18 +541,20 @@ public class C64AppBuilder : IC64FileContainer
         public bool IsTerminal => true;
 
         /// <inheritdoc/>
-        public int Width => 120;
+        public int Width { get; }
 
         /// <inheritdoc/>
-        public int Height => 40;
+        public int Height { get; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ForceAnsiConsoleOutput"/> class.
         /// </summary>
         /// <param name="writer">The output writer.</param>
-        public ForceAnsiConsoleOutput(TextWriter writer)
+        public ForceAnsiConsoleOutput(TextWriter writer, int width, int height)
         {
             Writer = writer ?? throw new ArgumentNullException(nameof(writer));
+            Width = width;
+            Height = height;
         }
     }
 }

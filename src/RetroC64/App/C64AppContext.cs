@@ -45,4 +45,11 @@ public abstract class C64AppContext
     /// Gets the logger for the RetroC64 pipeline.
     /// </summary>
     public ILogger Log { get; protected set; }
+    
+    /// <summary>
+    /// Determines whether logging is enabled for the specified log level.
+    /// </summary>
+    /// <param name="level">The log level to check for logging enablement.</param>
+    /// <returns>true if logging is enabled for the specified log level; otherwise, false.</returns>
+    public bool IsLogEnabled(LogLevel level) => level >= _builder.Settings.LogLevel;
 }

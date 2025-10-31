@@ -1,6 +1,7 @@
 // Copyright (c) Alexandre Mutel. All rights reserved.
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
+
 using Asm6502;
 using RetroC64;
 using RetroC64.App;
@@ -12,6 +13,9 @@ using static RetroC64.C64Registers;
 
 return await C64AppBuilder.Run<C64NETConf2025>(args);
 
+/// <summary>
+/// Small demo showcase for a presentation at .NET Conf 2025.
+/// </summary>
 public class C64NETConf2025 : C64AppAsmProgram
 {
     protected override Mos6502Label Build(C64AppBuildContext context, C64Assembler asm)

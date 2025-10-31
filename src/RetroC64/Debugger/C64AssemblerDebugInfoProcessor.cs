@@ -2,10 +2,12 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using Asm6502;
+using Microsoft.Extensions.Primitives;
+using RetroC64.App;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using Asm6502;
-using RetroC64.App;
+using System.Text;
 
 namespace RetroC64.Debugger;
 
@@ -76,6 +78,14 @@ internal class C64AssemblerDebugInfoProcessor : C64AppContext
             }
         }
         return false;
+    }
+
+    public void DumpTo(TextWriter writer)
+    {
+        foreach (var range in _codeMemoryRanges)
+        {
+            range.DumpTo(writer);
+        }
     }
 
     public void AddDebugMap(C64AssemblerDebugMap? debugMap)
@@ -294,6 +304,43 @@ internal class C64AssemblerDebugInfoProcessor : C64AppContext
         public int LineNumber { get; set; }
 
         public int ColumnNumber { get; set; }
+
+        public void DumpTo(TextWriter writer)
+        {
+            DumpTo(writer, new List<bool>());
+        }
+
+        private void DumpTo(TextWriter writer, List<bool> lastLevelList)
+        {
+            var indentLevel = new StringBuilder();
+            for (int i = 0; i < lastLevelList.Count - 1; i++)
+            {
+                indentLevel.Append(lastLevelList[i] ? "  ": "│ ");
+            }
+
+            if (lastLevelList.Count > 0)
+            {
+                indentLevel.Append(lastLevelList[^1] ? "└─" : "├─");
+            }
+
+            writer.Write(StartAddress == EndAddress
+                ? $"{indentLevel}Name {Name}, Address=${StartAddress:x4}, IsLineInfo={IsLineInfo}, LineNumber={LineNumber}"
+                : $"{indentLevel}Name {Name}, StartAddress=${StartAddress:x4}, EndAddress=${EndAddress:x4}, IsLineInfo={IsLineInfo}, LineNumber={LineNumber}");
+            if (Children.Count > 0)
+            {
+                writer.WriteLine($", Children={Children.Count}");
+            }
+            else
+            {
+                writer.WriteLine();
+            }
+            for (var i = 0; i < Children.Count; i++)
+            {
+                var child = Children[i];
+                List<bool> newLastLevelList = [.. lastLevelList, i == Children.Count - 1];
+                child.DumpTo(writer, newLastLevelList);
+            }
+        }
 
         public bool TryFindFileAndLineNumber(ushort address, [NotNullWhen(true)] out string? filePath, out int lineNumber)
         {

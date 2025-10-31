@@ -42,12 +42,19 @@ internal class C64DebugAdapterFactory : IDisposable
         }, TaskScheduler.Default);
     }
 
+    public bool IsRunning => _serverTask is { IsCompleted: false } && _debugServer is not null;
+
     public void SetDebugMap(C64AssemblerDebugMap? debugMap)
     {
         _currentDebugMap = debugMap;
 
         // TODO: This is not thread-safe
         _debugServer?.AddDebugMap(debugMap);
+    }
+
+    public void ResumeAndInvalidate()
+    {
+        _debugServer?.ResumeAndInvalidate();
     }
 
     private async Task DebuggerThread()
@@ -62,20 +69,18 @@ internal class C64DebugAdapterFactory : IDisposable
             {
                 _context.InfoMarkup($"🐛 C64 Debugger server listening on port [cyan]{port}[/]");
                 using var socket = await tcpListener.AcceptSocketAsync(_cancellationToken).ConfigureAwait(false);
-                await using (var io = new NetworkStream(socket))
+                await using var io = new NetworkStream(socket);
+                var debugServer = new C64DebugAdapter(_builder, _monitor, _cancellationToken);
+                _debugServer = debugServer;
+                try
                 {
-                    var debugServer = new C64DebugAdapter(_builder, _monitor, _cancellationToken);
-                    _debugServer = debugServer;
-                    try
-                    {
-                        debugServer.AddDebugMap(_currentDebugMap); // In case it was set before connection
-                        await debugServer.Run(io).ConfigureAwait(false); // If Run becomes async in the future, await it here.
-                    }
-                    finally
-                    {
-                        debugServer.Dispose();
-                        _debugServer = null;
-                    }
+                    debugServer.AddDebugMap(_currentDebugMap); // In case it was set before connection
+                    await debugServer.Run(io).ConfigureAwait(false); // If Run becomes async in the future, await it here.
+                }
+                finally
+                {
+                    debugServer.Dispose();
+                    _debugServer = null;
                 }
             }
             catch (OperationCanceledException)

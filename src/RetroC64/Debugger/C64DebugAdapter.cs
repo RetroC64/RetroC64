@@ -2,7 +2,9 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using System.Globalization;
 using Asm6502;
+using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Newtonsoft.Json;
@@ -11,35 +13,36 @@ using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
 using RetroC64.Vice.Monitor.Responses;
 using Spectre.Console;
-using System.Globalization;
 
 // ReSharper disable InconsistentNaming
 
 namespace RetroC64.Debugger;
 
-internal class C64DebugAdapter : DebugAdapterBase, IDisposable
+internal partial class C64DebugAdapter : DebugAdapterBase, IDisposable
 {
-    private readonly C64DebugContext _context;
-    private readonly ViceMonitor _monitor;
     private readonly CancellationToken _cancellationToken;
-    private readonly C64DebugMachineState _machineState;
-    private readonly JsonSerializer _jsonSerializer;
-    private readonly Dictionary<C64DebugVariableScope, List<C64DebugVariable>> _mapScopeToDebugVariables;
-    private readonly Dictionary<string, C64DebugVariable> _mapVariableNameToDebugVariable;
-
-    private readonly Dictionary<uint, C64DebugBreakpoint> _mapBreakpointIdToBreakpoint = new();
-
-    private readonly List<C64DebugBreakpoint> _sourceBreakpoints = new();
+    private readonly C64DebugContext _context;
     private readonly List<C64DebugBreakpoint> _dataBreakpoints = new();
-    private readonly List<C64DebugBreakpoint> _instructionBreakpoints = new();
 
     private readonly C64AssemblerDebugInfoProcessor _debugInfoProcessor;
-    private readonly List<C64AssemblerDebugMap> _pendingDebugMaps;
-    private bool _shuttingDown;
-    private bool _isVisualStudioAttached;
+    private readonly List<C64DebugBreakpoint> _instructionBreakpoints = new();
+    private readonly JsonSerializer _jsonSerializer;
+    private readonly C64DebugMachineState _machineState;
 
-    private CheckpointResponse? _breakpointHit;
+    private readonly Dictionary<uint, C64DebugBreakpoint> _mapBreakpointIdToBreakpoint = new();
+    private readonly Dictionary<C64DebugVariableScope, List<C64DebugVariable>> _mapScopeToDebugVariables;
+    private readonly Dictionary<string, C64DebugVariable> _mapVariableNameToDebugVariable;
+    private readonly ViceMonitor _monitor;
+    private readonly List<C64AssemblerDebugMap> _pendingDebugMaps;
+
+    private bool _supportsInvalidatedEvent;
+
+    private readonly List<C64DebugBreakpoint> _sourceBreakpoints = new();
     
+    private CheckpointResponse? _breakpointHit;
+    private bool _isVisualStudioAttached;
+    private bool _shuttingDown;
+
     public C64DebugAdapter(C64AppBuilder builder, ViceMonitor monitor, CancellationToken cancellationToken)
     {
         _context = new C64DebugContext(builder);
@@ -62,11 +65,29 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         _monitor.Stopped += EmulatorStopped;
     }
 
+    public bool Enabled { get; private set; }
+
     public void Dispose()
     {
         _monitor.BreakpointHit -= EmulatorBreakpointHit;
         _monitor.Resumed -= EmulatorResumed;
         _monitor.Stopped -= EmulatorStopped;
+    }
+
+    public void AddDebugMap(C64AssemblerDebugMap? debugMap)
+    {
+        if (debugMap is null)
+        {
+            return;
+        }
+
+        // As we are called from another thread on this method
+        // we need to stage the debug maps so that they are picked up
+        // by GetDebugInfoProcessor();
+        lock (_pendingDebugMaps)
+        {
+            _pendingDebugMaps.Add(debugMap);
+        }
     }
 
     public async Task Run(Stream io)
@@ -90,12 +111,10 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         Protocol.Run();
         try
         {
-
             while (Protocol.IsRunning && !_cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(10, _cancellationToken).ConfigureAwait(false);
             }
-
         }
         finally
         {
@@ -111,112 +130,6 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
                 // ignore
             }
         }
-    }
-
-    private void InitializeDebugVariables()
-    {
-        foreach (var debugVariable in DebugVariables)
-        {
-            if (!_mapScopeToDebugVariables.TryGetValue(debugVariable.Scope, out var list))
-            {
-                list = new List<C64DebugVariable>();
-                _mapScopeToDebugVariables[debugVariable.Scope] = list;
-            }
-            list.Add(debugVariable);
-            _mapVariableNameToDebugVariable[debugVariable.Name] = debugVariable;
-        }
-    }
-    
-    protected override ResponseBody HandleProtocolRequest(string requestType, object requestArgs)
-    {
-        var writer = new StringWriter();
-        try
-        {
-            _jsonSerializer.Serialize(writer, requestArgs);
-        }
-        catch
-        {
-            // ignore
-        }
-
-        //if (_context.Log.IsEnabled(LogLevel.Debug))
-        {
-            _context.DebugMarkup($"C64 Debugger Protocol Request: [yellow]{Markup.Escape(requestType)}[/] {Markup.Escape(writer.ToString())}");
-        }
-
-        return base.HandleProtocolRequest(requestType, requestArgs);
-    }
-
-    protected override void HandleProtocolError(Exception ex)
-    {
-        if (ex is not OperationCanceledException && !_shuttingDown)
-        {
-            _context.Error($"🐛 C64 Debugger Protocol Error: {ex.Message}");
-        }
-    }
-
-    public bool Enabled { get; private set; }
-
-    public void AddDebugMap(C64AssemblerDebugMap? debugMap)
-    {
-        if (debugMap is null)
-        {
-            return;
-        }
-
-        // As we are called from another thread on this method
-        // we need to stage the debug maps so that they are picked up
-        // by GetDebugInfoProcessor();
-        lock (_pendingDebugMaps)
-        {
-            _pendingDebugMaps.Add(debugMap);
-        }
-    }
-
-    private C64AssemblerDebugInfoProcessor GetDebugInfoProcessor()
-    {
-        List<C64AssemblerDebugMap>? debugMaps = null;
-        lock (_pendingDebugMaps)
-        {
-            if (_pendingDebugMaps.Count > 0)
-            {
-                debugMaps = new List<C64AssemblerDebugMap>();
-                debugMaps.AddRange(_pendingDebugMaps);
-                _pendingDebugMaps.Clear();
-            }
-        }
-
-        // Update the debug info processor if necessary
-        if (debugMaps is not null)
-        {
-            Console.WriteLine("GetDebugInfoProcessor updated");
-
-            _debugInfoProcessor.Reset(); // Add support for multiples
-            foreach (var debugMap in debugMaps)
-            {
-                _debugInfoProcessor.AddDebugMap(debugMap);
-            }
-
-            // Update the user allocated zero-page addresses names
-            _machineState.ZpAddresses.Clear();
-            foreach (var debugMap in debugMaps)
-            {
-                foreach (var item in debugMap.ZpLabels)
-                {
-                    if (!string.IsNullOrEmpty(item.Name))
-                    {
-                        _machineState.ZpAddresses.Add(item.Address, item.Name);
-                    }
-                }
-            }
-        }
-
-        return _debugInfoProcessor;
-    }
-
-    protected override SourceResponse HandleSourceRequest(SourceArguments arguments)
-    {
-        return new SourceResponse();
     }
 
     protected override AttachResponse HandleAttachRequest(AttachArguments arguments)
@@ -250,7 +163,7 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
     {
         return new BreakpointLocationsResponse();
     }
-    
+
     protected override CancelResponse HandleCancelRequest(CancelArguments arguments)
     {
         return new CancelResponse();
@@ -261,13 +174,13 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
     {
         return new CompletionsResponse();
     }
-    
+
     protected override ConfigurationDoneResponse HandleConfigurationDoneRequest(ConfigurationDoneArguments arguments)
     {
         Enabled = true;
         return new ConfigurationDoneResponse();
     }
-    
+
     protected override ContinueResponse HandleContinueRequest(ContinueArguments arguments)
     {
         _monitor.Exit(_cancellationToken);
@@ -275,7 +188,21 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
 
         return new ContinueResponse();
     }
-     
+
+    protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
+    {
+        var response = new DataBreakpointInfoResponse();
+        if ((arguments.AsAddress.HasValue && arguments.AsAddress.Value) || _mapVariableNameToDebugVariable.TryGetValue(arguments.Name, out var debugVariable))
+        {
+            response.DataId = arguments.Name;
+            response.Description = $"Data Breakpoint on {arguments.Name}";
+            response.CanPersist = true; // we assume that we can persist data breakpoints (fixed memory, same variables / register names for a given program)
+            response.AccessTypes.Add(DataBreakpointAccessType.ReadWrite);
+        }
+
+        return response;
+    }
+
     protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
     {
         var ram = _machineState.Ram.AsSpan();
@@ -284,105 +211,105 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         {
             return new DisassembleResponse();
         }
-        
+
         // disassemble {"memoryReference":"2322","offset":0,"instructionOffset":-50,"instructionCount":100,"resolveSymbols":true}
         if (!TryParseAddress(arguments.MemoryReference, out ushort address))
         {
             return new DisassembleResponse();
         }
-        
+
         address = (ushort)(address + (arguments.Offset ?? 0));
 
         if (!GetDebugInfoProcessor().TryFindCodeRegion(address, out var memoryRange))
         {
             memoryRange = (address, 0xFFFF);
         }
-        
+
         // TODO: collect memory maps from compilation (which part is assembly...etc.)
         var response = new DisassembleResponse();
 
         // Prescan for max instruction count;
-        var span = ram[address..];
+        int instructionOffset = arguments.InstructionOffset ?? 0;
 
-        int instructionCount = 0;
-        int expectedInstructionCount = arguments.InstructionCount;
-        int byteOffset = 0;
-
-        // If we have an instruction offset, we need to go back or forward
-        if (arguments.InstructionOffset.HasValue)
+        // This is the most complicated case.
+        // We need to go backwards, but we don't have a memory map to know where instructions start.
+        if (instructionOffset < 0)
         {
-            var instructionOffset = arguments.InstructionOffset.Value;
-
-            // This is the most complicated case.
-            // We need to go backwards, but we don't have a memory map to know where instructions start.
-            if (instructionOffset < 0)
+            var startAddress = memoryRange.StartAddress;
+            // If we have a valid memory range coming from debug info, we can start from there
+            // and decompile until we reach the desired instruction offset
+            // and then adjust the address and byte offset accordingly
+            if (startAddress < address)
             {
-                var startAddress = memoryRange.StartAddress;
-                // If we have a valid memory range coming from debug info, we can start from there
-                // and decompile until we reach the desired instruction offset
-                // and then adjust the address and byte offset accordingly
-                if (startAddress < address)
+                var spanFromStart = ram[startAddress..];
+
+                // Otherwise skip instructions
+                var byteOffsetFromStart = 0;
+                var offsets = new List<int>(); // TODO: could be reset and reuse
+                while (Mos6510Instruction.TryDecode(spanFromStart[byteOffsetFromStart..], out var instruction, out var sizeInBytes))
                 {
-                    span = ram[startAddress..];
-
-                    // Otherwise skip instructions
-                    var byteOffsetFromStart = 0;
-                    var offsets = new List<int>(); // TODO: could be reset and reuse
-                    while (Mos6510Instruction.TryDecode(span.Slice(byteOffsetFromStart), out var instruction, out var sizeInBytes))
+                    if (startAddress + byteOffsetFromStart >= address)
                     {
-                        if (startAddress + byteOffsetFromStart >= address)
+                        // This should not happen, but just in case, reset to normal processing
+                        if (startAddress + byteOffsetFromStart > address)
                         {
-                            // This should not happen, but just in case, reset to normal processing
-                            if (startAddress + byteOffsetFromStart > address)
-                            {
-                                span = ram[address..];
-                                break;
-                            }
-
-                            // We reached the address, now adjust the address and byte offset accordingly
-                            // We also need to adjust the expected instruction count and instruction offset
-                            address = startAddress;
-                            var lastIndexInOffsets = Math.Min(offsets.Count, -instructionOffset);
-                            byteOffset = offsets[^lastIndexInOffsets];
-                            expectedInstructionCount = arguments.InstructionCount + lastIndexInOffsets;
-                            instructionOffset += lastIndexInOffsets;
                             break;
                         }
 
-                        offsets.Add(byteOffsetFromStart);
-                        byteOffsetFromStart += sizeInBytes;
+                        // We reached the address, now adjust the address and byte offset accordingly
+                        // We also need to adjust the expected instruction count and instruction offset
+                        address = startAddress;
+                        instructionOffset = offsets.Count + instructionOffset;
+                        break;
                     }
-                }
 
-                // If we are still negative instruction offset, we need to show empty instructions
-                // As we can't disassemble backwards without a memory map
-                for (int i = -1; i >= instructionOffset; i--)
-                {
-                    var byteAddress = address + i;
-                    if (byteAddress < 0) byteAddress = 0;
-
-                    response.Instructions.Add(new DisassembledInstruction()
-                    {
-                        Address = $"0x{byteAddress:X4}", // Display hexadecimal address as the instruction is also using this
-                        InstructionBytes = $"{ram[byteAddress]:x2}",
-                        Instruction = "..." // Cannot decode instruction backward
-                    });
+                    offsets.Add(byteOffsetFromStart);
+                    byteOffsetFromStart += sizeInBytes;
                 }
             }
             else
             {
-                // Otherwise skip instructions
-                while (instructionOffset > 0 && Mos6510Instruction.TryDecode(span.Slice(byteOffset), out var instruction, out var sizeInBytes))
-                {
-                    byteOffset += sizeInBytes;
-                    instructionOffset--;
-                }
+                address = startAddress;
+                instructionOffset = address + instructionOffset - startAddress;
             }
         }
 
-        while (instructionCount < expectedInstructionCount && Mos6510Instruction.TryDecode(span.Slice(byteOffset), out var instruction, out var sizeInBytes))
+        var span = ram[address..];
+        int instructionCount = 0;
+        int byteOffset = 0;
+        while (instructionCount < arguments.InstructionCount)
         {
-            // TODO: handle relative jumps
+            if (instructionOffset < 0)
+            {
+                var byteAddress = address + instructionOffset;
+                if (byteAddress < 0) byteAddress = 0;
+
+                response.Instructions.Add(new DisassembledInstruction()
+                {
+                    Address = $"0x{byteAddress:x4}", // Display hexadecimal address as the instruction is also using this
+                    InstructionBytes = $"{ram[byteAddress]:x2}",
+                    Instruction = "..." // Cannot decode instruction backward
+                });
+
+                instructionCount++;
+                instructionOffset++;
+                continue;
+            }
+
+            if (!Mos6510Instruction.TryDecode(span[byteOffset..], out var instruction, out var sizeInBytes))
+            {
+                // Should never happen with 6510, as we decode all bytes as instructions
+                break;
+            }
+
+            // Skip instructions
+            if (instructionOffset > 0)
+            {
+                instructionOffset--;
+                byteOffset += sizeInBytes;
+                continue;
+            }
+
             response.Instructions.Add(new DisassembledInstruction()
             {
                 Address = $"0x{address + byteOffset:x4}", // Display hexadecimal address as the instruction is also using this
@@ -395,11 +322,6 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         }
 
         return response;
-    }
-
-    private static string CreateMemoryReference(int address)
-    {
-        return $"0x{address:X4}";
     }
 
     protected override DisconnectResponse HandleDisconnectRequest(DisconnectArguments arguments)
@@ -424,7 +346,7 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
 
             return new EvaluateResponse()
             {
-                Result = result > 0xFF ? $"${result:X4} ({result})" : $"${result:X2} ({result})",
+                Result = result > 0xFF ? $"${result:x4} ({result})" : $"${result:x2} ({result})",
                 VariablesReference = 0
             };
         }
@@ -437,7 +359,7 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
             };
         }
     }
-    
+
     protected override GotoResponse HandleGotoRequest(GotoArguments arguments)
     {
         return base.HandleGotoRequest(arguments);
@@ -453,17 +375,16 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         // Detect which debugger (VSCode or VisualStudio) is attaching
         _isVisualStudioAttached = arguments.ClientID is not null && arguments.ClientID.Equals("visualstudio", StringComparison.OrdinalIgnoreCase);
 
+        _supportsInvalidatedEvent = arguments.SupportsInvalidatedEvent.HasValue && arguments.SupportsInvalidatedEvent.Value;
+
         // ⚠️ NOTE: In the specs it says that Initialized event must be sent after the initialize request,
         // but it would complicate the code to send it later asynchronously.
         // It seems to be ok, so keep it here for simplicity.
         Protocol.SendEvent(new InitializedEvent());
 
         // We need to capture the state as Visual Studio is setting breakpoints right after initialization
-        LocalSuspendMonitor(() =>
-        {
-            CaptureMachineState();
-        });
-            
+        LocalSuspendMonitor(() => { CaptureMachineState(); });
+
         return new InitializeResponse()
         {
             // Basic features supported
@@ -553,14 +474,32 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         return new PauseResponse();
     }
 
-    private void NotifyStopped(StoppedEvent.ReasonValue reason, params uint[] breakpointIds)
+    protected override void HandleProtocolError(Exception ex)
     {
-        Protocol.SendEvent(new StoppedEvent(reason)
+        if (ex is not OperationCanceledException && !_shuttingDown)
         {
-            AllThreadsStopped = true,
-            ThreadId = 0,
-            HitBreakpointIds = [..breakpointIds.Select(x => (int)x)]
-        });
+            _context.Error($"🐛 C64 Debugger Protocol Error: {ex.Message}");
+        }
+    }
+
+    protected override ResponseBody HandleProtocolRequest(string requestType, object requestArgs)
+    {
+        var writer = new StringWriter();
+        try
+        {
+            _jsonSerializer.Serialize(writer, requestArgs);
+        }
+        catch
+        {
+            // ignore
+        }
+
+        if (_context.IsLogEnabled(LogLevel.Debug))
+        {
+            _context.DebugMarkup($"C64 Debugger Protocol Request: [yellow]{Markup.Escape(requestType)}[/] {Markup.Escape(writer.ToString())}");
+        }
+
+        return base.HandleProtocolRequest(requestType, requestArgs);
     }
 
     protected override ReadMemoryResponse HandleReadMemoryRequest(ReadMemoryArguments arguments)
@@ -579,14 +518,14 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         {
             count = 0x10000 - address;
         }
-        
+
         var buffer = _machineState.Ram.AsSpan().Slice(address, count);
         memoryResponse.Address = $"{address}";
         memoryResponse.Data = Convert.ToBase64String(buffer);
 
         return memoryResponse;
     }
-    
+
     protected override ScopesResponse HandleScopesRequest(ScopesArguments arguments)
     {
         var cpuRegistersScope = new Scope()
@@ -600,46 +539,46 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         {
             cpuRegistersScope.PresentationHint = Scope.PresentationHintValue.Registers;
         }
-        
+
         var response = new ScopesResponse([
             cpuRegistersScope,
-            new ()
+            new()
             {
                 Name = "CPU Flags",
                 VariablesReference = (int)C64DebugVariableScope.CpuFlags,
                 Expensive = false
             },
-            new ()
+            new()
             {
                 Name = "Stack",
                 VariablesReference = (int)C64DebugVariableScope.Stack,
                 Expensive = false
             },
-            new ()
+            new()
             {
                 Name = "Zero-Page",
                 VariablesReference = (int)C64DebugVariableScope.ZeroPage,
                 Expensive = false
             },
-            new ()
+            new()
             {
                 Name = "Misc",
                 VariablesReference = (int)C64DebugVariableScope.Misc,
                 Expensive = false
             },
-            new ()
+            new()
             {
                 Name = "Video (VIC)",
                 VariablesReference = (int)C64DebugVariableScope.VicRegisters,
                 Expensive = false
             },
-            new ()
+            new()
             {
                 Name = "Sprites (VIC)",
                 VariablesReference = (int)C64DebugVariableScope.SpriteRegisters,
                 Expensive = false
             },
-            new ()
+            new()
             {
                 Name = "Audio (SID)",
                 VariablesReference = (int)C64DebugVariableScope.SidRegisters,
@@ -647,12 +586,6 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
             }
         ]);
         return response;
-    }
-
-    protected override SetExceptionBreakpointsResponse HandleSetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments)
-    {
-        // Only used for VisualStudio, but we don't support it.
-        return new SetExceptionBreakpointsResponse();
     }
 
     protected override SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
@@ -703,27 +636,12 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
                     InstructionReference = CreateMemoryReference(range.StartAddress),
                     Line = sourceBreakpoint.Line,
                 });
-
             }
         });
 
         return response;
     }
-    
-    protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
-    {
-        var response = new DataBreakpointInfoResponse();
-        if ((arguments.AsAddress.HasValue && arguments.AsAddress.Value) || _mapVariableNameToDebugVariable.TryGetValue(arguments.Name, out var debugVariable))
-        {
-            response.DataId = arguments.Name;
-            response.Description = $"Data Breakpoint on {arguments.Name}";
-            response.CanPersist = true; // we assume that we can persist data breakpoints (fixed memory, same variables / register names for a given program)
-            response.AccessTypes.Add(DataBreakpointAccessType.ReadWrite);
-        }
 
-        return response;
-    }
-    
     protected override SetDataBreakpointsResponse HandleSetDataBreakpointsRequest(SetDataBreakpointsArguments arguments)
     {
         var response = new SetDataBreakpointsResponse();
@@ -788,6 +706,12 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         return response;
     }
 
+    protected override SetExceptionBreakpointsResponse HandleSetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments)
+    {
+        // Only used for VisualStudio, but we don't support it.
+        return new SetExceptionBreakpointsResponse();
+    }
+
     protected override SetInstructionBreakpointsResponse HandleSetInstructionBreakpointsRequest(SetInstructionBreakpointsArguments arguments)
     {
         var response = new SetInstructionBreakpointsResponse();
@@ -817,7 +741,7 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
                 });
 
                 var c64Breakpoint = new C64DebugBreakpoint(instructionBreakpoint, checkpointResponse);
-                
+
                 _mapBreakpointIdToBreakpoint[checkpointResponse.CheckpointNumber] = c64Breakpoint;
                 _instructionBreakpoints.Add(c64Breakpoint);
 
@@ -833,14 +757,6 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         return response;
     }
 
-    private void EmulatorBreakpointHit(CheckpointResponse obj)
-    {
-        _context.Debug($"VICE Callback -> Breakpoint Hit - Id: {obj.CheckpointNumber}");
-
-        // Capture the information that a breakpoint was hit
-        _breakpointHit = obj;
-    }
-
     protected override SetVariableResponse HandleSetVariableRequest(SetVariableArguments arguments)
     {
         if (_mapVariableNameToDebugVariable.TryGetValue(arguments.Name, out var debugVariable))
@@ -852,7 +768,12 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
 
         throw new InvalidOperationException($"Cannot set variable {arguments.Name}");
     }
-    
+
+    protected override SourceResponse HandleSourceRequest(SourceArguments arguments)
+    {
+        return new SourceResponse();
+    }
+
     protected override StackTraceResponse HandleStackTraceRequest(StackTraceArguments arguments)
     {
         // Always capture on a stack trace
@@ -871,7 +792,7 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
             InstructionPointerReference = CreateMemoryReference(_machineState.PC),
             Line = lineNumber,
         };
-        
+
         // Force null for empty file path
         if (!string.IsNullOrEmpty(filePath))
         {
@@ -886,15 +807,15 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
 
         return response;
     }
-    
+
     protected override StepInResponse HandleStepInRequest(StepInArguments arguments)
     {
-        _monitor.AdvanceInstructions(new AdvanceInstructionsCommand() { InstructionCount = 1, StepOverSubroutines = false}, _cancellationToken);
+        _monitor.AdvanceInstructions(new AdvanceInstructionsCommand() { InstructionCount = 1, StepOverSubroutines = false }, _cancellationToken);
         ProcessMonitorEvents(MonitorResponseType.Stopped);
         NotifyStopped(StoppedEvent.ReasonValue.Step);
         return new StepInResponse();
     }
-    
+
     protected override StepOutResponse HandleStepOutRequest(StepOutArguments arguments)
     {
         _monitor.ExecuteUntilReturn(_cancellationToken);
@@ -902,25 +823,25 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         NotifyStopped(StoppedEvent.ReasonValue.Step);
         return new StepOutResponse();
     }
-    
+
     protected override TerminateResponse HandleTerminateRequest(TerminateArguments arguments)
     {
         // TODO
         return new TerminateResponse();
     }
-    
+
     protected override TerminateThreadsResponse HandleTerminateThreadsRequest(TerminateThreadsArguments arguments)
     {
         // TODO
         return new TerminateThreadsResponse();
     }
-    
+
     protected override ThreadsResponse HandleThreadsRequest(ThreadsArguments arguments)
     {
         // Only one thread
         return new ThreadsResponse([new(0, "C64")]);
     }
-    
+
     protected override VariablesResponse HandleVariablesRequest(VariablesArguments arguments)
     {
         var response = new VariablesResponse();
@@ -992,6 +913,50 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         };
     }
 
+    internal static bool TryParseTextAsInt(string text, out int address)
+    {
+        var span = text.AsSpan();
+
+        // Remove any text after the first space (e.g. "0x0a (10)")
+        var firstSpaceIndex = span.IndexOf(' ');
+        if (firstSpaceIndex > 0)
+        {
+            span = span[..firstSpaceIndex];
+        }
+
+        if (span.Length > 2 && span[0] == '0' && span[1] == 'x')
+        {
+            return int.TryParse(span[2..], NumberStyles.HexNumber, null, out address);
+        }
+        else if (span.Length > 0 && span[0] == '$')
+        {
+            return int.TryParse(span[1..], NumberStyles.HexNumber, null, out address);
+        }
+
+        return int.TryParse(text, out address);
+    }
+
+    internal void ResumeAndInvalidate()
+    {
+        if (_monitor.State == EmulatorState.Paused)
+        {
+            _context.Debug("Debugger paused. Resuming.");
+            _monitor.Exit(_cancellationToken);
+            ProcessMonitorEvents(MonitorResponseType.Resumed);
+            Protocol.SendEvent(new ContinuedEvent());
+        }
+
+        if (_supportsInvalidatedEvent)
+        {
+            _context.Debug("Send Invalidate.");
+
+            Protocol.SendEvent(new InvalidatedEvent()
+            {
+                Areas = [InvalidatedAreas.All]
+            });
+        }
+    }
+
     private void CaptureMachineState()
     {
         ProcessMonitorEvents();
@@ -1005,6 +970,11 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
             debugVariable.ReadFromMachineState(_machineState);
             _mapVariableNameToDebugVariable[debugVariable.Name] = debugVariable;
         }
+    }
+
+    private static string CreateMemoryReference(int address)
+    {
+        return $"0x{address:x4}";
     }
 
     private void DeleteAllBreakpoints()
@@ -1028,48 +998,16 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
             _monitor.DeleteCheckpoint(item.Breakpoint.CheckpointNumber, _cancellationToken);
             _mapBreakpointIdToBreakpoint.Remove(item.Breakpoint.CheckpointNumber);
         }
+
         breakpoints.Clear();
     }
 
-    private bool TryParseAddress(string text, out ushort address)
+    private void EmulatorBreakpointHit(CheckpointResponse obj)
     {
-        if (_mapVariableNameToDebugVariable.TryGetValue(text, out var debugVariable))
-        {
-            address = debugVariable.Address;
-            return true;
-        }
-        
-        if (TryParseTextAsInt(text, out var addressInt))
-        {
-            address = (ushort)addressInt;
-            return true;
-        }
+        _context.Debug($"VICE Callback -> Breakpoint Hit - Id: {obj.CheckpointNumber}");
 
-        address = 0;
-        return false;
-    }
-    
-    internal static bool TryParseTextAsInt(string text, out int address)
-    {
-        var span = text.AsSpan();
-
-        // Remove any text after the first space (e.g. "0x0a (10)")
-        var firstSpaceIndex = span.IndexOf(' ');
-        if (firstSpaceIndex > 0)
-        {
-            span = span[..firstSpaceIndex];
-        }
-        
-        if (span.Length > 2 && span[0] == '0' && span[1] == 'x')
-        {
-            return int.TryParse(span[2..], NumberStyles.HexNumber, null, out address);
-        }
-        else if (span.Length > 0 && span[0] == '$')
-        {
-            return int.TryParse(span[1..], NumberStyles.HexNumber, null, out address);
-        }
-        
-        return int.TryParse(text, out address);
+        // Capture the information that a breakpoint was hit
+        _breakpointHit = obj;
     }
 
 
@@ -1090,26 +1028,72 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
                 _context.Debug($"Breakpoint hit (kind: {reason}) at ${_breakpointHit.StartAddress:x4}");
                 NotifyStopped(reason, c64Breakpoint.Breakpoint.CheckpointNumber);
             }
+
             _breakpointHit = null;
         }
     }
-    
-    private void ProcessMonitorEvents(MonitorResponseType? waitForType = null)
-    {
-        while (_monitor.TryDequeueResponse(out var response))
-        {
-            if (response is RegisterResponse registerResponse)
-            {
-                _machineState.UpdateRegisters(registerResponse.Items);
-            }
 
-            if (waitForType.HasValue && response.ResponseType == waitForType.Value)
+    private C64AssemblerDebugInfoProcessor GetDebugInfoProcessor()
+    {
+        List<C64AssemblerDebugMap>? debugMaps = null;
+        lock (_pendingDebugMaps)
+        {
+            if (_pendingDebugMaps.Count > 0)
             {
-                break;
+                debugMaps = [.. _pendingDebugMaps];
+                _pendingDebugMaps.Clear();
             }
         }
+
+        // Update the debug info processor if necessary
+        if (debugMaps is not null)
+        {
+            _context.Debug("Reload DebugInfoProcessor 💥");
+            _debugInfoProcessor.Reset(); // Add support for multiples
+            foreach (var debugMap in debugMaps)
+            {
+                _debugInfoProcessor.AddDebugMap(debugMap);
+            }
+
+            // Update the user allocated zero-page addresses names
+            _machineState.ZpAddresses.Clear();
+            foreach (var debugMap in debugMaps)
+            {
+                foreach (var item in debugMap.ZpLabels)
+                {
+                    if (!string.IsNullOrEmpty(item.Name))
+                    {
+                        _machineState.ZpAddresses[item.Address] = item.Name;
+                    }
+                }
+            }
+
+            if (_context.IsLogEnabled(LogLevel.Trace))
+            {
+                var writer = new StringWriter();
+                _debugInfoProcessor.DumpTo(writer);
+                _context.Trace($"C64 Debugger Debug Info Processor:\n{writer}");
+            }
+        }
+
+        return _debugInfoProcessor;
     }
-    
+
+    private void InitializeDebugVariables()
+    {
+        foreach (var debugVariable in DebugVariables)
+        {
+            if (!_mapScopeToDebugVariables.TryGetValue(debugVariable.Scope, out var list))
+            {
+                list = new List<C64DebugVariable>();
+                _mapScopeToDebugVariables[debugVariable.Scope] = list;
+            }
+
+            list.Add(debugVariable);
+            _mapVariableNameToDebugVariable[debugVariable.Name] = debugVariable;
+        }
+    }
+
     private void LocalSuspendMonitor(Action action)
     {
         var wasRunning = _monitor.State == EmulatorState.Running;
@@ -1126,112 +1110,47 @@ internal class C64DebugAdapter : DebugAdapterBase, IDisposable
         }
     }
 
-    private readonly C64DebugVariable[] DebugVariables =
-    [
-        new(C64DebugVariableScope.CpuRegisters, "PC (Program Counter)", state => $"${state.PC:x4} ({state.PC})", RegisterId.PC) { MemoryReference = "RAM" },
-        new(C64DebugVariableScope.CpuRegisters, "A (Accumulator)", state => $"${state.A:x2} ({state.A})", RegisterId.A),
-        new(C64DebugVariableScope.CpuRegisters, "X (Register)", state => $"${state.X:x2} ({state.X})", RegisterId.X),
-        new(C64DebugVariableScope.CpuRegisters, "Y (Register)", state => $"${state.Y:x2} ({state.Y})", RegisterId.Y),
-        new(C64DebugVariableScope.CpuRegisters, "SP (stack pointer)", state => $"${state.SP:x2} ({state.SP})", RegisterId.SP),
+    private void NotifyStopped(StoppedEvent.ReasonValue reason, params uint[] breakpointIds)
+    {
+        Protocol.SendEvent(new StoppedEvent(reason)
+        {
+            AllThreadsStopped = true,
+            ThreadId = 0,
+            HitBreakpointIds = [..breakpointIds.Select(x => (int)x)]
+        });
+    }
 
-        new(C64DebugVariableScope.CpuFlags, "SR (Status Register)", state => $"${(byte)state.SR:x2} ({(byte)state.SR})", RegisterId.FLAGS),
-        new(C64DebugVariableScope.CpuFlags, 7, "N (Bit 7 - Negative)", state => $"{((byte)state.SR >> 7) & 1}"),
-        new(C64DebugVariableScope.CpuFlags, 6, "V (Bit 6 - Overflow)", state => $"{((byte)state.SR >> 6) & 1}"),
-        new(C64DebugVariableScope.CpuFlags, 5, "- (Bit 5 - Ignored)", state => $"{((byte)state.SR >> 5) & 1}"),
-        new(C64DebugVariableScope.CpuFlags, 4, "B (Bit 4 - Break)", state => $"{((byte)state.SR >> 4) & 1}"),
-        new(C64DebugVariableScope.CpuFlags, 3, "D (Bit 3 - Decimal)", state => $"{((byte)state.SR >> 3) & 1}"),
-        new(C64DebugVariableScope.CpuFlags, 2, "I (Bit 2 - Irq Disable)", state => $"{((byte)state.SR >> 2) & 1}"),
-        new(C64DebugVariableScope.CpuFlags, 1, "Z (Bit 1 - Zero)", state => $"{((byte)state.SR >> 1) & 1}"),
-        new(C64DebugVariableScope.CpuFlags, 0, "C (Bit 0 - Carry)", state => $"{((byte)state.SR >> 0) & 1}"),
+    private void ProcessMonitorEvents(MonitorResponseType? waitForType = null)
+    {
+        while (_monitor.TryDequeueResponse(out var response))
+        {
+            if (response is RegisterResponse registerResponse)
+            {
+                _machineState.UpdateRegisters(registerResponse.Items);
+            }
 
-        // Stack variables
-        .. Enumerable.Range(0, 256).Select(i => new C64DebugVariable(C64DebugVariableScope.Stack, (ushort)(0x1FF - i))),
+            if (waitForType.HasValue && response.ResponseType == waitForType.Value)
+            {
+                break;
+            }
+        }
+    }
 
-        new(C64DebugVariableScope.Misc, "Raster Line", state => $"${state.RasterLine:x3} ({state.RasterLine})"),
-        new(C64DebugVariableScope.Misc, "Raster Cycle", state => $"${state.RasterCycle:x4} ({state.RasterCycle})"),
+    private bool TryParseAddress(string text, out ushort address)
+    {
+        if (_mapVariableNameToDebugVariable.TryGetValue(text, out var debugVariable))
+        {
+            address = debugVariable.Address;
+            return true;
+        }
 
-        .. Enumerable.Range(0, 256).Select(i => new C64DebugVariable(C64DebugVariableScope.ZeroPage, (byte)i)),
+        if (TryParseTextAsInt(text, out var addressInt))
+        {
+            address = (ushort)addressInt;
+            return true;
+        }
 
-        // Sprite registers
-        new(C64DebugVariableScope.SpriteRegisters, 0xd000, "VIC: Sprite 0 X"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd001, "VIC: Sprite 0 Y"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd002, "VIC: Sprite 1 X"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd003, "VIC: Sprite 1 Y"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd004, "VIC: Sprite 2 X"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd005, "VIC: Sprite 2 Y"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd006, "VIC: Sprite 3 X"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd007, "VIC: Sprite 3 Y"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd008, "VIC: Sprite 4 X"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd009, "VIC: Sprite 4 Y"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd00a, "VIC: Sprite 5 X"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd00b, "VIC: Sprite 5 Y"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd00c, "VIC: Sprite 6 X"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd00d, "VIC: Sprite 6 Y"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd00e, "VIC: Sprite 7 X"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd00f, "VIC: Sprite 7 Y"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd010, "VIC: Sprite X MSB"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd015, "VIC: Sprite Enable"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd017, "VIC: Sprite Y-Expand"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd01b, "VIC: Sprite Priority"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd01c, "VIC: Sprite Multicolor Enable"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd01d, "VIC: Sprite X-Expand"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd01e, "VIC: Sprite-Sprite Collision"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd01f, "VIC: Sprite-Background Collision"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd025, "VIC: Sprite Multicolor 0"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd026, "VIC: Sprite Multicolor 1"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd027, "VIC: Sprite 0 Color"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd028, "VIC: Sprite 1 Color"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd029, "VIC: Sprite 2 Color"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd02a, "VIC: Sprite 3 Color"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd02b, "VIC: Sprite 4 Color"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd02c, "VIC: Sprite 5 Color"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd02d, "VIC: Sprite 6 Color"),
-        new(C64DebugVariableScope.SpriteRegisters, 0xd02e, "VIC: Sprite 7 Color"),
-
-        // VicRegisters variables
-        new(C64DebugVariableScope.VicRegisters, 0xd011, "VIC: Control 1 (YScroll/RasterHi)"),
-        new(C64DebugVariableScope.VicRegisters, 0xd012, "VIC: Raster Counter"),
-        new(C64DebugVariableScope.VicRegisters, 0xd013, "VIC: Light Pen X"),
-        new(C64DebugVariableScope.VicRegisters, 0xd014, "VIC: Light Pen Y"),
-        new(C64DebugVariableScope.VicRegisters, 0xd016, "VIC: Control 2 (XScroll)"),
-        new(C64DebugVariableScope.VicRegisters, 0xd018, "VIC: Memory Pointers"),
-        new(C64DebugVariableScope.VicRegisters, 0xd019, "VIC: IRQ Flags"),
-        new(C64DebugVariableScope.VicRegisters, 0xd01a, "VIC: IRQ Enable"),
-        new(C64DebugVariableScope.VicRegisters, 0xd020, "VIC: Border Color"),
-        new(C64DebugVariableScope.VicRegisters, 0xd021, "VIC: Background Color 0"),
-        new(C64DebugVariableScope.VicRegisters, 0xd022, "VIC: Background Color 1"),
-        new(C64DebugVariableScope.VicRegisters, 0xd023, "VIC: Background Color 2"),
-        new(C64DebugVariableScope.VicRegisters, 0xd024, "VIC: Background Color 3"),
-
-        // SidRegisters variables
-        new(C64DebugVariableScope.SidRegisters, 0xd400, "SID: Voice 1 Freq Lo"),
-        new(C64DebugVariableScope.SidRegisters, 0xd401, "SID: Voice 1 Freq Hi"),
-        new(C64DebugVariableScope.SidRegisters, 0xd402, "SID: Voice 1 Pulse Lo"),
-        new(C64DebugVariableScope.SidRegisters, 0xd403, "SID: Voice 1 Pulse Hi"),
-        new(C64DebugVariableScope.SidRegisters, 0xd404, "SID: Voice 1 Control"),
-        new(C64DebugVariableScope.SidRegisters, 0xd405, "SID: Voice 1 Attack/Decay"),
-        new(C64DebugVariableScope.SidRegisters, 0xd406, "SID: Voice 1 Sustain/Release"),
-        new(C64DebugVariableScope.SidRegisters, 0xd407, "SID: Voice 2 Freq Lo"),
-        new(C64DebugVariableScope.SidRegisters, 0xd408, "SID: Voice 2 Freq Hi"),
-        new(C64DebugVariableScope.SidRegisters, 0xd409, "SID: Voice 2 Pulse Lo"),
-        new(C64DebugVariableScope.SidRegisters, 0xd40a, "SID: Voice 2 Pulse Hi"),
-        new(C64DebugVariableScope.SidRegisters, 0xd40b, "SID: Voice 2 Control"),
-        new(C64DebugVariableScope.SidRegisters, 0xd40c, "SID: Voice 2 Attack/Decay"),
-        new(C64DebugVariableScope.SidRegisters, 0xd40d, "SID: Voice 2 Sustain/Release"),
-        new(C64DebugVariableScope.SidRegisters, 0xd40e, "SID: Voice 3 Freq Lo"),
-        new(C64DebugVariableScope.SidRegisters, 0xd40f, "SID: Voice 3 Freq Hi"),
-        new(C64DebugVariableScope.SidRegisters, 0xd410, "SID: Voice 3 Pulse Lo"),
-        new(C64DebugVariableScope.SidRegisters, 0xd411, "SID: Voice 3 Pulse Hi"),
-        new(C64DebugVariableScope.SidRegisters, 0xd412, "SID: Voice 3 Control"),
-        new(C64DebugVariableScope.SidRegisters, 0xd413, "SID: Voice 3 Attack/Decay"),
-        new(C64DebugVariableScope.SidRegisters, 0xd414, "SID: Voice 3 Sustain/Release"),
-        new(C64DebugVariableScope.SidRegisters, 0xd415, "SID: Filter Cutoff Lo"),
-        new(C64DebugVariableScope.SidRegisters, 0xd416, "SID: Filter Cutoff Hi"),
-        new(C64DebugVariableScope.SidRegisters, 0xd417, "SID: Resonance/Route"),
-        new(C64DebugVariableScope.SidRegisters, 0xd418, "SID: Filter Mode/Volume"),
-        new(C64DebugVariableScope.SidRegisters, 0xd419, "SID: POT X (read)"),
-        new(C64DebugVariableScope.SidRegisters, 0xd41a, "SID: POT Y (read)"),
-        new(C64DebugVariableScope.SidRegisters, 0xd41b, "SID: Oscillator 3 (read)"),
-        new(C64DebugVariableScope.SidRegisters, 0xd41c, "SID: Envelope 3 (read)"),
-    ];
+        address = 0;
+        return false;
+    }
 }
