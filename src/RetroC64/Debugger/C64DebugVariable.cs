@@ -4,6 +4,7 @@
 
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Newtonsoft.Json;
+using RetroC64.App;
 using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
 
@@ -125,7 +126,7 @@ internal class C64DebugVariable : Variable
         Value = _getterValue(state);
     }
 
-    public void WriteToMachineState(ViceMonitor monitor, C64DebugMachineState state, string text)
+    public void WriteToMachineState(C64DebugContext context, ViceMonitor monitor, C64DebugMachineState state, string text)
     {
         if (_setterValue != null)
         {
@@ -137,12 +138,12 @@ internal class C64DebugVariable : Variable
             }
             else
             {
-                throw new InvalidOperationException($"Cannot parse value `{text}` as integer");
+                context.Warn($"🐛 Cannot parse value `{text}` as integer");
             }
         }
         else
         {
-            throw new InvalidOperationException($"Variable {Name} is read-only");
+            context.Warn($"🐛 Variable {Name} is read-only");
         }
     }
 

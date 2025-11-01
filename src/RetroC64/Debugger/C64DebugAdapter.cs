@@ -761,12 +761,13 @@ internal partial class C64DebugAdapter : DebugAdapterBase, IDisposable
     {
         if (_mapVariableNameToDebugVariable.TryGetValue(arguments.Name, out var debugVariable))
         {
-            debugVariable.WriteToMachineState(_monitor, _machineState, arguments.Value);
+            debugVariable.WriteToMachineState(_context, _monitor, _machineState, arguments.Value);
 
             return new SetVariableResponse() { Value = debugVariable.Value };
         }
 
-        throw new InvalidOperationException($"Cannot set variable {arguments.Name}");
+        _context.Error($"🐛 Cannot set variable {arguments.Name}");
+        return new SetVariableResponse();
     }
 
     protected override SourceResponse HandleSourceRequest(SourceArguments arguments)
