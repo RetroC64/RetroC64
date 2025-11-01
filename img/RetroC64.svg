@@ -29,16 +29,18 @@
      inkscape:pagecheckerboard="true"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="px"
-     inkscape:zoom="1.2653379"
-     inkscape:cx="384.08713"
-     inkscape:cy="476.9477"
+     inkscape:zoom="1.664555"
+     inkscape:cx="470.69636"
+     inkscape:cy="494.72681"
      inkscape:window-width="3840"
      inkscape:window-height="2054"
      inkscape:window-x="-11"
      inkscape:window-y="-11"
      inkscape:window-maximized="1"
      inkscape:current-layer="layer1"
-     showgrid="false" />
+     showgrid="false"
+     showborder="true"
+     inkscape:antialias-rendering="true" />
   <defs
      id="defs1">
     <linearGradient
@@ -260,9 +262,9 @@
        style="color-interpolation-filters:sRGB;"
        inkscape:label="Drop Shadow"
        id="filter17"
-       x="-0.57659241"
+       x="-0.58172193"
        y="-0.061825582"
-       width="2.1549862"
+       width="2.1652642"
        height="1.1556472">
       <feFlood
          result="flood"
@@ -591,11 +593,12 @@
          y="73.556946">Retro</tspan></text>
     <text
        xml:space="preserve"
-       style="filter:url(#filter17);font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       style="font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter17)"
        x="24.316862"
        y="72.97551"
        id="text19-4"
-       inkscape:label="Retro-Outer"><tspan
+       inkscape:label="Retro-Outer"
+       transform="matrix(0.99672202,0,0,1.0054038,0.34130378,-0.07795148)"><tspan
          sodipodi:role="line"
          id="tspan19-5"
          style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:84.6667px;line-height:5.51216px;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
