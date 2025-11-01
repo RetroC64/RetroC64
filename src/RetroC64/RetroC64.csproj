@@ -10,11 +10,11 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Description>This is a default project description</Description>
+    <Description>RetroC64 SDK - Bringing modern .NET development to the legendary Commodore 64.</Description>
     <Copyright>Alexandre Mutel</Copyright>
     <NeutralLanguage>en-US</NeutralLanguage>
     <Authors>Alexandre Mutel</Authors>
-    <PackageTags>tag1;tag2;tag3</PackageTags>
+    <PackageTags>c64;assembler;debugger</PackageTags>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     <PackageIcon>RetroC64.png</PackageIcon>
     <PackageProjectUrl>https://github.com/xoofx/RetroC64</PackageProjectUrl>
@@ -37,11 +37,10 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.VisualStudio.Shared.VSCodeDebugProtocol" />
     <PackageReference Include="System.IO.Hashing" />
-    <!-- Disabled to make it compatible with code reload for now -->
-    <!--<PackageReference Include="MinVer">
+    <PackageReference Include="MinVer">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>-->
+    </PackageReference>
     <PackageReference Include="XenoAtom.CommandLine" />
   </ItemGroup>
 
