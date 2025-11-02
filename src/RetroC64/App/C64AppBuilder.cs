@@ -106,7 +106,7 @@ public class C64AppBuilder : IC64FileContainer
     /// <summary>
     /// Builds the current app graph and emits files to the active container.
     /// </summary>
-    internal async Task BuildAsync()
+    internal void Build()
     {
         EnsureLogFactory(); // Allow to configure the settings after construction
 
@@ -164,7 +164,7 @@ public class C64AppBuilder : IC64FileContainer
             WorkingDirectory = GetOrCreateBuildFolder()
         };
         
-        runner.Exited += async () =>
+        runner.Exited += () =>
         {
             if (!_cancellationTokenSource.IsCancellationRequested)
             {
@@ -243,7 +243,7 @@ public class C64AppBuilder : IC64FileContainer
                         }
                     }
                     
-                    await BuildAsync();
+                    Build();
 
                     if (_buildGeneratedFilesForVice.Count > 0)
                     {

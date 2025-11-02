@@ -28,10 +28,10 @@ public sealed class C64CommandLine : CommandApp
         {
             new HelpOption(),
 
-            async (ctx, arguments) =>
+            (ctx, arguments) =>
             {
-                await _builder.BuildAsync();
-                return 0;
+                _builder.Build();
+                return ValueTask.FromResult(0);
             }
         };
         AddCommonOptions(BuildCommand);
