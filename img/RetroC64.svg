@@ -30,14 +30,14 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="px"
      inkscape:zoom="1.664555"
-     inkscape:cx="470.69636"
-     inkscape:cy="494.72681"
+     inkscape:cx="360.45671"
+     inkscape:cy="534.37707"
      inkscape:window-width="3840"
      inkscape:window-height="2054"
      inkscape:window-x="-11"
      inkscape:window-y="-11"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer1"
+     inkscape:current-layer="svg1"
      showgrid="false"
      showborder="true"
      inkscape:antialias-rendering="true" />
@@ -262,10 +262,10 @@
        style="color-interpolation-filters:sRGB;"
        inkscape:label="Drop Shadow"
        id="filter17"
-       x="-0.58172193"
-       y="-0.061825582"
-       width="2.1652642"
-       height="1.1556472">
+       x="-0.031306916"
+       y="-0.087222394"
+       width="1.0626138"
+       height="1.2064408">
       <feFlood
          result="flood"
          in="SourceGraphic"
@@ -519,106 +519,6 @@
   </defs>
   <g
      inkscape:groupmode="layer"
-     id="layer3"
-     inkscape:label="Layer 3">
-    <rect
-       style="fill:#ffffff;fill-rule:evenodd;stroke:#000000;stroke-width:0;stroke-dasharray:none"
-       id="rect1"
-       width="261.9375"
-       height="261.9375"
-       x="3.6513841"
-       y="4.8792706"
-       rx="21.166666"
-       ry="21.166666"
-       inkscape:label="white bg" />
-  </g>
-  <g
-     inkscape:label="Layer 1"
-     inkscape:groupmode="layer"
-     id="layer1"
-     style="filter:url(#filter17)">
-    <text
-       xml:space="preserve"
-       style="font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:url(#linearGradient63);stroke:#000000;stroke-width:3.70416662;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:round;stroke-linecap:round"
-       x="38.860233"
-       y="256.54211"
-       id="text18"
-       inkscape:label="C64-Main"><tspan
-         sodipodi:role="line"
-         id="tspan18"
-         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:url(#linearGradient63);stroke:#000000;stroke-width:3.70416662;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:round;stroke-linecap:round"
-         x="38.860233"
-         y="256.54211"><tspan
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';stroke-width:3.70416662;stroke-dasharray:none;stroke-linejoin:round;stroke-linecap:round;fill:url(#linearGradient63)"
-           id="tspan29">C64</tspan></tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter17)"
-       x="38.814186"
-       y="256.35959"
-       id="text18-4"
-       inkscape:label="C64-Outer"><tspan
-         sodipodi:role="line"
-         id="tspan18-2"
-         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-         x="38.814186"
-         y="256.35959"><tspan
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-           id="tspan29-3">C64</tspan></tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:url(#linearGradient97);stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter17)"
-       x="39.044777"
-       y="255.97636"
-       id="text18-1"
-       inkscape:label="C64-Inner"><tspan
-         sodipodi:role="line"
-         id="tspan18-3"
-         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:url(#linearGradient97);stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-         x="39.044777"
-         y="255.97636"><tspan
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:url(#linearGradient97);stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none"
-           id="tspan29-8">C64</tspan></tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:url(#linearGradient28);fill-opacity:1;stroke:#000000;stroke-width:3.70416662;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:round;stroke-linecap:round"
-       x="24.17625"
-       y="73.556946"
-       id="text19"
-       inkscape:label="Retro-Main"><tspan
-         sodipodi:role="line"
-         id="tspan19"
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:84.6667px;line-height:5.51216px;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:url(#linearGradient28);fill-opacity:1;stroke:#000000;stroke-width:3.70416662;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:round;stroke-linecap:round"
-         x="24.17625"
-         y="73.556946">Retro</tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter17)"
-       x="24.316862"
-       y="72.97551"
-       id="text19-4"
-       inkscape:label="Retro-Outer"
-       transform="matrix(0.99672202,0,0,1.0054038,0.34130378,-0.07795148)"><tspan
-         sodipodi:role="line"
-         id="tspan19-5"
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:84.6667px;line-height:5.51216px;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-         x="24.316862"
-         y="72.97551">Retro</tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:url(#linearGradient99);fill-opacity:1;stroke:none;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter17)"
-       x="24.187922"
-       y="72.861633"
-       id="text19-9"
-       inkscape:label="Retro-Inner"><tspan
-         sodipodi:role="line"
-         id="tspan19-8"
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:84.6667px;line-height:5.51216px;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:url(#linearGradient99);fill-opacity:1;stroke:none;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-         x="24.187922"
-         y="72.861633">Retro</tspan></text>
-  </g>
-  <g
-     inkscape:groupmode="layer"
      id="layer2"
      inkscape:label="Layer 2"
      style="filter:url(#filter133)">
@@ -668,6 +568,85 @@
        rx="6.6257377"
        inkscape:label="yellow" />
   </g>
+  <text
+     xml:space="preserve"
+     style="filter:url(#filter17);font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:url(#linearGradient63);stroke:#000000;stroke-width:3.70416662;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:round;stroke-linecap:round"
+     x="38.860233"
+     y="256.54211"
+     id="text18"
+     inkscape:label="C64-Main"><tspan
+       sodipodi:role="line"
+       id="tspan18"
+       style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:url(#linearGradient63);stroke:#000000;stroke-width:3.70416662;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:round;stroke-linecap:round"
+       x="38.860233"
+       y="256.54211"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';stroke-width:3.70416662;stroke-dasharray:none;stroke-linejoin:round;stroke-linecap:round;fill:url(#linearGradient63)"
+         id="tspan29">C64</tspan></tspan></text>
+  <text
+     xml:space="preserve"
+     style="filter:url(#filter17);font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     x="38.814186"
+     y="256.35959"
+     id="text18-4"
+     inkscape:label="C64-Outer"><tspan
+       sodipodi:role="line"
+       id="tspan18-2"
+       style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       x="38.814186"
+       y="256.35959"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+         id="tspan29-3">C64</tspan></tspan></text>
+  <text
+     xml:space="preserve"
+     style="filter:url(#filter17);font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:url(#linearGradient97);stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     x="39.044777"
+     y="255.97636"
+     id="text18-1"
+     inkscape:label="C64-Inner"><tspan
+       sodipodi:role="line"
+       id="tspan18-3"
+       style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:url(#linearGradient97);stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       x="39.044777"
+       y="255.97636"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:url(#linearGradient97);stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none"
+         id="tspan29-8">C64</tspan></tspan></text>
+  <text
+     xml:space="preserve"
+     style="filter:url(#filter17);font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:url(#linearGradient28);fill-opacity:1;stroke:#000000;stroke-width:3.70416662;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:round;stroke-linecap:round"
+     x="24.17625"
+     y="73.556946"
+     id="text19"
+     inkscape:label="Retro-Main"><tspan
+       sodipodi:role="line"
+       id="tspan19"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:84.6667px;line-height:5.51216px;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:url(#linearGradient28);fill-opacity:1;stroke:#000000;stroke-width:3.70416662;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:round;stroke-linecap:round"
+       x="24.17625"
+       y="73.556946">Retro</tspan></text>
+  <text
+     xml:space="preserve"
+     style="filter:url(#filter17);font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:1.06293;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     x="24.316862"
+     y="72.97551"
+     id="text19-4"
+     inkscape:label="Retro-Outer"
+     transform="matrix(0.99971308,0,0,1.0000626,-0.20001098,0.21212362)"><tspan
+       sodipodi:role="line"
+       id="tspan19-5"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:84.6667px;line-height:5.51216px;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:1.06293;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       x="24.316862"
+       y="72.97551">Retro</tspan></text>
+  <text
+     xml:space="preserve"
+     style="filter:url(#filter17);font-size:84.6667px;line-height:5.51216px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:url(#linearGradient99);fill-opacity:1;stroke:none;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     x="24.187922"
+     y="72.861633"
+     id="text19-9"
+     inkscape:label="Retro-Inner"><tspan
+       sodipodi:role="line"
+       id="tspan19-8"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:84.6667px;line-height:5.51216px;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:url(#linearGradient99);fill-opacity:1;stroke:none;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       x="24.187922"
+       y="72.861633">Retro</tspan></text>
   <metadata
      id="metadata1">
     <rdf:RDF>
