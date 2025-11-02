@@ -26,7 +26,9 @@ The RetroC64 SDK brings genuine Commodore 64 development directly into your C# a
 
 ## 📦 Install
 
-You simply need to add the [RetroC64](https://www.nuget.org/packages/RetroC64/) [![NuGet](https://img.shields.io/nuget/v/RetroC64.svg)](https://www.nuget.org/packages/RetroC64/) to your .NET project:
+Make sure you have the [.NET SDK 9.0 or higher](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) installed.
+
+Then, you simply need to add the [RetroC64](https://www.nuget.org/packages/RetroC64/) [![NuGet](https://img.shields.io/nuget/v/RetroC64.svg)](https://www.nuget.org/packages/RetroC64/) to your .NET project:
 
 ```bash
 dotnet add package RetroC64
