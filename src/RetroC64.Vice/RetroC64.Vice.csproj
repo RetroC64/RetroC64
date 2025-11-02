@@ -1,11 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Library</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
+  <Import Project="../Packaging.shared.props" />
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)readme.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
 
 </Project>

@@ -1,34 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Library</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <IsPackable>true</IsPackable>
-
-    <!-- Enable AOT analyzers -->
-    <IsAotCompatible>true</IsAotCompatible>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <Description>RetroC64 SDK - Bringing modern .NET development to the legendary Commodore 64.</Description>
-    <Copyright>Alexandre Mutel</Copyright>
-    <NeutralLanguage>en-US</NeutralLanguage>
-    <Authors>Alexandre Mutel</Authors>
-    <PackageTags>c64;assembler;debugger</PackageTags>
-    <PackageReadmeFile>readme.md</PackageReadmeFile>
-    <PackageIcon>RetroC64.png</PackageIcon>
-    <PackageProjectUrl>https://github.com/xoofx/RetroC64</PackageProjectUrl>
-    <PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
-    <!--Add support for sourcelink-->
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-  </PropertyGroup>
+  <Import Project="../Packaging.shared.props" />
 
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)../../img/RetroC64.png" Pack="true" PackagePath="/" />
     <None Include="$(MSBuildThisFileDirectory)../../readme.md" Pack="true" PackagePath="/" />
-    <InternalsVisibleTo Include="$(AssemblyName).Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -37,10 +11,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.VisualStudio.Shared.VSCodeDebugProtocol" />
     <PackageReference Include="System.IO.Hashing" />
-    <PackageReference Include="MinVer">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="XenoAtom.CommandLine" />
   </ItemGroup>
 
