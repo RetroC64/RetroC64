@@ -3,5 +3,5 @@
 [msbuild]
 project = "RetroC64.slnx"
 [github]
-user = "xoofx"
+user = "RetroC64"
 repo = "RetroC64"
