@@ -30,8 +30,8 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="px"
      inkscape:zoom="1.664555"
-     inkscape:cx="360.45671"
-     inkscape:cy="534.37707"
+     inkscape:cx="360.75708"
+     inkscape:cy="534.37706"
      inkscape:window-width="3840"
      inkscape:window-height="2054"
      inkscape:window-x="-11"
@@ -584,17 +584,18 @@
          id="tspan29">C64</tspan></tspan></text>
   <text
      xml:space="preserve"
-     style="filter:url(#filter17);font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     style="font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Argon Var';-inkscape-font-specification:'Monaspace Argon Var';letter-spacing:0px;word-spacing:0px;fill:none;stroke:#ffffff;stroke-width:1.05833;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter17)"
      x="38.814186"
      y="256.35959"
      id="text18-4"
-     inkscape:label="C64-Outer"><tspan
+     inkscape:label="C64-Outer"
+     transform="matrix(0.99704516,0,0,1.0002768,0.75431814,-0.06066872)"><tspan
        sodipodi:role="line"
        id="tspan18-2"
-       style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:expanded;font-size:88.1944px;line-height:5.74183px;font-family:'Monaspace Krypton Var';-inkscape-font-specification:'Monaspace Krypton Var Ultra-Bold Expanded';fill:none;stroke:#ffffff;stroke-width:1.05833;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
        x="38.814186"
        y="256.35959"><tspan
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:none;stroke:#ffffff;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Inter;-inkscape-font-specification:'Inter Bold';fill:none;stroke:#ffffff;stroke-width:1.05833;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
          id="tspan29-3">C64</tspan></tspan></text>
   <text
      xml:space="preserve"
