@@ -5,3 +5,5 @@ project = "RetroC64.slnx"
 [github]
 user = "RetroC64"
 repo = "RetroC64"
+[changelog]
+owners = ["xoofx"]
