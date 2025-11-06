@@ -41,8 +41,8 @@ public sealed class C64CommandLine : CommandApp
         {
             new HelpOption(),
 
-            {"vice-log", $"Enables VICE monitor logging to the console. Default is {_builder.Settings.EnableViceMonitorLogging.ToString().ToLowerInvariant()}.", s => Settings.EnableViceMonitorLogging = s is not null},
-            {"vice-log-verbose", $"Enables verbose VICE monitor logging. Default is {_builder.Settings.EnableViceMonitorVerboseLogging.ToString().ToLowerInvariant()}.", s => Settings.EnableViceMonitorVerboseLogging = s is not null},
+            {"vice-log", $"Enables VICE monitor logging to the console. Default is {_builder.Settings.Vice.EnableLogging.ToString().ToLowerInvariant()}.", s => _builder.Settings.Vice.EnableLogging = s is not null},
+            {"vice-log-verbose", $"Enables verbose VICE monitor logging. Default is {_builder.Settings.Vice.EnableVerboseLogging.ToString().ToLowerInvariant()}.", s => _builder.Settings.Vice.EnableVerboseLogging = s is not null},
             {"dap-port=", $"Sets the Debug Adapter Protocol port. Default is {_builder.Settings.DebugAdapterProtocolPort}.", s => Settings.DebugAdapterProtocolPort = int.Parse(s ?? _builder.Settings.DebugAdapterProtocolPort.ToString()) },
 
             async (ctx, arguments) =>

@@ -179,9 +179,9 @@ public class C64AppBuilder : IC64FileContainer
             {
                 while (!_cancellationTokenSource.IsCancellationRequested)
                 {
-                    runner.Verbose = Settings.EnableViceMonitorVerboseLogging;
+                    runner.Verbose = Settings.Vice.EnableVerboseLogging;
 
-                    if (Settings.EnableViceMonitorLogging && runner.TryDequeueOutput(out var stdout))
+                    if (Settings.Vice.EnableLogging && runner.TryDequeueOutput(out var stdout))
                     {
                         Log.LogInformationMarkup($"[yellow]VICE[/]: {Markup.Escape(stdout.ReplaceLineEndings(" "))}");
                     }
@@ -224,6 +224,7 @@ public class C64AppBuilder : IC64FileContainer
 
                             monitor.Connect();
 
+
                             if (!debuggerServer.IsRunning)
                             {
                                 debuggerServer.Start();
@@ -242,8 +243,14 @@ public class C64AppBuilder : IC64FileContainer
                             break;
                         }
                     }
-                    
+
                     Build();
+
+                    if (monitor.State == EmulatorState.Running)
+                    {
+                        // Apply VICE settings
+                        Settings.Vice.ApplyTo(monitor, _cancellationTokenSource.Token);
+                    }
 
                     if (_buildGeneratedFilesForVice.Count > 0)
                     {

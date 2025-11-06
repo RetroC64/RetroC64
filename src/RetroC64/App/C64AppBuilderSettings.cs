@@ -17,12 +17,7 @@ public class C64AppBuilderSettings
     /// <summary>
     /// Enables logging of VICE monitor output to the console. Default is false.
     /// </summary>
-    public bool EnableViceMonitorLogging { get; set; }
-
-    /// <summary>
-    /// Enables verbose logging of VICE monitor output. Default is false.
-    /// </summary>
-    public bool EnableViceMonitorVerboseLogging { get; set; }
+    public C64ViceSettings Vice { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the minimum log level used by RetroC64.
