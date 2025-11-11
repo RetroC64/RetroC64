@@ -1091,8 +1091,7 @@ public static class C64Registers
         /// <summary>0=Set TOD, 1=Set alarm.</summary>
         SetAlarm = 1 << 7,
     }
-
-
+    
     /// <summary>
     /// CPU port configuration flags. Used with <see cref="C64Registers.C64_CPU_PORT"/>.
     /// </summary>
@@ -1120,27 +1119,57 @@ public static class C64Registers
     [Flags]
     public enum CPUPortFlags : byte
     {
-        /// <summary>No configuration flag.</summary>
+        /// <summary>No flags set. With LORAM=0 and HIRAM=0, the system maps RAM at $A000-$BFFF, $D000-$DFFF and $E000-$FFFF.</summary>
         None = 0,
-        RamVisibleAtBasicAndKernalRoms = 0b01,
 
-        RamVisibleAtBasicRom = 0b10,
+        // Memory control bits (6510 $01)
+        /// <summary>LORAM (bit 0). 0 disables BASIC ROM at $A000-$BFFF; 1 enables it when HIRAM=1.</summary>
+        Loram = 1 << 0,
+        /// <summary>HIRAM (bit 1). 0 disables KERNAL ROM at $E000-$FFFF; 1 enables it.</summary>
+        Hiram = 1 << 1,
+        /// <summary>CHAREN (bit 2). 0=Character ROM at $D000-$DFFF; 1=I/O at $D000-$DFFF. Ignored when LORAM=0 and HIRAM=0.</summary>
+        Charen = 1 << 2,
 
-        BasicAndKernalROM = 0b11,
+        /// <summary>Mask covering memory configuration bits (LORAM | HIRAM | CHAREN).</summary>
+        MemoryMask = Loram | Hiram | Charen,
 
-        /// <summary>CHAREN: 0=char ROM, 1=I/O.</summary>
-        CharRomAsIO = 1 << 2,
-        /// <summary>Cassette data output.</summary>
+        // Datasette bits
+        /// <summary>Cassette data output (bit 3). Output signal level.</summary>
         Cassette = 1 << 3,
-        /// <summary>Cassette switch sense.</summary>
+        /// <summary>Cassette switch sense (bit 4). Datasette button status; 0 = One or more of PLAY, RECORD, F.FWD or REW pressed; 1 = No button is pressed.</summary>
         CassetteSwitch = 1 << 4,
-        /// <summary>Cassette motor control.</summary>
+        /// <summary>Cassette motor control; 0=On, 1=Off (bit 5). Datasette motor control; 0 = On; 1 = Off.</summary>
         CassetteMotor = 1 << 5,
-        /// <summary>All RAM configuration (LORAM, HIRAM, CHAREN, CassetteSwitch, CassetteMotor).</summary>
-        FullRam = RamVisibleAtBasicAndKernalRoms | CharRomAsIO | CassetteSwitch | CassetteMotor,
+
+        // Predefined memory configurations (composed from LORAM/HIRAM/CHAREN)
+        /// <summary>%x00 → RAM at $A000-$BFFF, $D000-$DFFF, $E000-$FFFF. CHAREN ignored.</summary>
+        Mem_AllRAM = 0b000,
+        /// <summary>%x01 → RAM at $A000-$BFFF and $E000-$FFFF; $D000-$DFFF = Character ROM.</summary>
+        Mem_RAM_A_E_Char = Loram,
+        /// <summary>%x01 with CHAREN=1 → RAM at $A000-$BFFF and $E000-$FFFF; $D000-$DFFF = I/O.</summary>
+        Mem_RAM_A_E_IO = Loram | Charen,
+        /// <summary>%x10 → RAM at $A000-$BFFF; KERNAL ROM at $E000-$FFFF; $D000-$DFFF = Character ROM.</summary>
+        Mem_RAM_A_KERNAL_E_Char = Hiram,
+        /// <summary>%x10 with CHAREN=1 → RAM at $A000-$BFFF; KERNAL ROM at $E000-$FFFF; $D000-$DFFF = I/O.</summary>
+        Mem_RAM_A_KERNAL_E_IO = Hiram | Charen,
+        /// <summary>%x11 → BASIC ROM at $A000-$BFFF; KERNAL ROM at $E000-$FFFF; $D000-$DFFF = Character ROM.</summary>
+        Mem_BASIC_A_KERNAL_E_Char = Loram | Hiram,
+        /// <summary>%x11 with CHAREN=1 → BASIC ROM at $A000-$BFFF; KERNAL ROM at $E000-$FFFF; $D000-$DFFF = I/O.</summary>
+        Mem_BASIC_A_KERNAL_E_IO = Loram | Hiram | Charen,
+
         /// <summary>
-        /// Represents a configuration in which full RAM is accessible along with the kernal.
+        /// Represents the default configuration (BASIC ROM at $A000-$BFFF; KERNAL ROM at $E000-$FFFF; $D000-$DFFF = I/O) with cassette off ($37).
         /// </summary>
-        FullRamWithKernal = RamVisibleAtBasicRom | CharRomAsIO | CassetteSwitch | CassetteMotor,
+        Default = Mem_BASIC_A_KERNAL_E_IO | CassetteSwitch | CassetteMotor,
+
+        /// <summary>
+        /// Access to all RAMs with cassette off ($30).
+        /// </summary>
+        FullRam = Mem_AllRAM | CassetteSwitch | CassetteMotor,
+
+        /// <summary>
+        /// Access to all RAMs, with IO Registers and cassette off ($35).
+        /// </summary>
+        FullRamWithIO = Mem_RAM_A_E_IO | CassetteSwitch | CassetteMotor,
     }
 }

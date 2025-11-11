@@ -7,6 +7,7 @@ using RetroC64.Basic;
 using RetroC64.Vice.Monitor;
 using RetroC64.Vice.Monitor.Commands;
 using System.Runtime.CompilerServices;
+using static RetroC64.C64Registers;
 
 namespace RetroC64.App;
 
@@ -98,8 +99,9 @@ public abstract class C64AppAsmProgram : C64AppElement
     /// Emits common initialization: disable interrupts/NMI, set RAM access, and init stack.
     /// </summary>
     /// <param name="asm">Assembler.</param>
+    /// <param name="defaultFlags">CPU port flags. Default is <see cref="CPUPortFlags.Default"/>.</param>
     /// <returns>The same assembler to allow fluent usage.</returns>
-    protected C64Assembler BeginAsmInit(C64Assembler asm, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
+    protected C64Assembler BeginAsmInit(C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.Default, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         asm
             .BeginCodeSection("Init")
@@ -109,7 +111,7 @@ public abstract class C64AppAsmProgram : C64AppElement
             .STA(0x02A6) // Store back NTSC(0)/PAL(1) flag to 0x02A6
             .DisableAllIrq()
             .SetupStack()
-            .SetupRamAccess()
+            .SetupRamAccess(defaultFlags)
             .DisableNmi()
             .EndFunction();
         return asm;
