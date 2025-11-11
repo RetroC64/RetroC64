@@ -71,7 +71,7 @@ Run: `dotnet watch -- run` with launch VICE and allow live coding. It will displ
 
 ![HelloAsm Example](./doc/RetroC64-HelloAsm.png)
 
-See the emulator setup section in the [user guide](https://github.com/RetroC64/RetroC64/blob/main/doc/readme.md#emulator-setup-vice).
+See the emulator setup section in the [user guide](https://retroc64.github.io/docs).
 
 ## 🧪 Examples
 
@@ -79,7 +79,7 @@ Go to the [Examples](https://github.com/RetroC64/RetroC64-Examples) repository f
 
 ## 📖 User Guide
 
-For more details on how to use RetroC64, please visit the [user guide](https://github.com/RetroC64/RetroC64/blob/main/doc/readme.md).
+For more details on how to use RetroC64, please visit the [user guide](https://retroc64.github.io/docs).
 
 ## 🪪 License
 

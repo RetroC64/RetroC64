@@ -1,7 +1,4 @@
 <Solution>
-  <Folder Name="/Documentation/">
-    <File Path="../doc/readme.md" />
-  </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../.editorconfig" />
     <File Path="../.gitattributes" />
