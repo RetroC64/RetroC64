@@ -84,7 +84,6 @@ public abstract class C64AppElement : IEnumerable<C64AppElement>
 
     private void InitializeCore(C64AppInitializeContext context)
     {
-        Name = GetType().Name; // Reset name to default in case it was changed before
         Initialize(context);
 
         var span = CollectionsMarshal.AsSpan(_children);
