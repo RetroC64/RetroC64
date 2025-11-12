@@ -259,7 +259,7 @@ public class C64AppBuilder : IC64FileContainer
 
                         if (!_isLiveFileAutoStarted || _customCodeReloadAction is null)
                         {
-                            Log.LogInformationMarkup($"▶️ AutoStarting [yellow]{fileName}[/]");
+                            Log.LogInformationMarkup($"⏯️ AutoStarting [yellow]{Markup.Escape(fileName)}[/]");
 
                             monitor.Autostart(new AutostartCommand()
                             {
@@ -271,7 +271,7 @@ public class C64AppBuilder : IC64FileContainer
                         }
                         else
                         {
-                            Log.LogInformationMarkup($"▶️ LiveReloading [yellow]{fileName}[/]");
+                            Log.LogInformationMarkup($"⏯️ LiveReloading [yellow]{Markup.Escape(fileName)}[/]");
 
                             await _customCodeReloadAction(monitor);
                         }
