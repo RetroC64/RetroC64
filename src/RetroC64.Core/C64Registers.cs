@@ -1171,5 +1171,10 @@ public static class C64Registers
         /// Access to all RAMs, with IO Registers and cassette off ($35).
         /// </summary>
         FullRamWithIO = Mem_RAM_A_E_IO | CassetteSwitch | CassetteMotor,
+
+        /// <summary>
+        /// Access to all RAM including below $D000, with KERNAL ROM at $E000-$FFFF; $D000-$DFFF = I/O. ($35).
+        /// </summary>
+        RamWithKernalAndIO = Mem_RAM_A_KERNAL_E_IO | CassetteSwitch | CassetteMotor,
     }
 }
