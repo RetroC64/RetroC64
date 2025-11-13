@@ -101,7 +101,7 @@ public abstract class C64AppAsmProgram : C64AppElement
     /// <param name="asm">Assembler.</param>
     /// <param name="defaultFlags">CPU port flags. Default is <see cref="CPUPortFlags.Default"/>.</param>
     /// <returns>The same assembler to allow fluent usage.</returns>
-    protected C64Assembler BeginAsmInit(C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.RamWithKernalAndIO, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
+    protected C64Assembler BeginAsmInit(C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.FullRamWithIO, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
     {
         asm
             .BeginCodeSection("Init")

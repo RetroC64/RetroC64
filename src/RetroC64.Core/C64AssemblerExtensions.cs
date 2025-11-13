@@ -37,12 +37,12 @@ public static class C64AssemblerExtensions
     /// Configures the CPU port to enable full RAM access on the C64.
     /// </summary>
     /// <param name="asm">The assembler to configure the CPU port.</param>
-    /// <param name="defaultFlags">The CPU port flags to set, default is <see cref="CPUPortFlags.RamWithKernalAndIO"/>.</param>
+    /// <param name="defaultFlags">The CPU port flags to set, default is <see cref="CPUPortFlags.FullRamWithIO"/>.</param>
     /// <returns>The assembler instance for chaining.</returns>
     /// <remarks>
     /// Modifies the A register.
     /// </remarks>
-    public static C64Assembler SetupRamAccess(this C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.RamWithKernalAndIO, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
+    public static C64Assembler SetupRamAccess(this C64Assembler asm, CPUPortFlags defaultFlags = CPUPortFlags.FullRamWithIO, [CallerFilePath] string debugFilePath = "", [CallerLineNumber] int debugLineNumber = 0)
         => asm
             .BeginFunction(debugFilePath, debugLineNumber)
             .LDA_Imm(defaultFlags)
