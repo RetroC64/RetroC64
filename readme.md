@@ -69,7 +69,7 @@ public class HelloAsm : C64AppAsmProgram
 
 Run: `dotnet watch -- run` with launch VICE and allow live coding. It will display the following screen:
 
-![HelloAsm Example](./doc/RetroC64-HelloAsm.png)
+![HelloAsm Example](https://raw.githubusercontent.com/RetroC64/retroc64.github.io/main/img/RetroC64-HelloAsm.png)
 
 See the emulator setup section in the [user guide](https://retroc64.github.io/docs).
 
